@@ -8,7 +8,8 @@ using static System.Math;
 namespace AVC
 {
   /// <summary>
-  /// Вспомогательный обьект для получения с web-сервера данных о текстах, десериализации из JSON 
+  /// Вспомогательный объект для получения с web-сервера данных о плоском чертеже: его имя и набор примитивов
+  /// Для десериализации из JSON 
   /// </summary>
   [DataContract]
   [Obfuscation(Exclude = true, Feature = "renaming")]
