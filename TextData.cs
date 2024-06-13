@@ -34,37 +34,69 @@ namespace AVC
   public class
   TextData
   {
-    [DataMember]
-    public string Content { get; set; }
-
-    [DataMember]
-    public string Style { get; set; }
-
-    [DataMember]
-    public double X { get; set; }
-
-    [DataMember]
-    public double Y { get; set; }
-
-    [DataMember]
-    public double Height { get; set; }
-
-    [DataMember]
-    public double Rotation { get; set; }
-
-    [DataMember]
-    public bool Frame { get; set; }
-
-    [DataMember]
-    public string Color { get; set; }
 
     /// <summary>
-    /// Слой по умолчанию - Аннотации
+    /// Текстовый стиль. Если не существет - программа попытается вытащить такой стиль из шаблона.
+    /// Если не задан - бует текущий стиль чертежа.
     /// </summary>
     [DataMember]
-    public string Layer { get; set; }
+    public string 
+    Content { get; set; }
 
-    internal bool IsNull => IsNullOrWhiteSpace(Content);
+    [DataMember]
+    public string 
+    Style { get; set; }
+
+    /// <summary>
+    /// Точка вставки текста (левый нижний угол)
+    /// </summary>
+    [DataMember]
+    public double 
+    X { get; set; }
+
+    [DataMember]
+    public double 
+    Y { get; set; }
+
+    /// <summary>
+    /// Размер символов
+    /// </summary>
+    [DataMember]
+    public double 
+    Height { get; set; }
+
+    /// <summary>
+    /// Поворот текста. Градусы
+    /// </summary>
+    [DataMember]
+    public double 
+    Rotation { get; set; }
+
+    /// <summary>
+    /// Создавать рамку вогруг текста
+    /// </summary>
+    [DataMember]
+    public bool 
+    Frame { get; set; }
+
+    /// <summary>
+    /// Имя цвета (как он отображается в Палитре Свойств AVC). 
+    /// По умолчанию - текущий цвет чертежа.
+    /// </summary>
+    [DataMember]
+    public string 
+    Color { get; set; }
+
+    /// <summary>
+    /// Слой по умолчанию - Аннотации. 
+    /// Если слоя нет в чертеже - программа попытается вытащить его из шаблона или создаст новый.
+    /// </summary>
+    [DataMember]
+    public string 
+    Layer { get; set; }
+
+    internal bool 
+    IsNull => IsNullOrWhiteSpace(Content);
 
     public TextData() { }
 
@@ -80,6 +112,7 @@ namespace AVC
       MText text = MTextExt.CreateText(Content, Style, Height, Frame, db, tr);
       if (text is null) return null;
       if (IsNullOrEmpty(Style)) text.Attachment = AttachmentPoint.BottomLeft;
+      text.Location = new Point3d(X, Y, 0);
       text.Rotation = Rotation/180*PI;
 
       if (!IsNullOrWhiteSpace(Layer))

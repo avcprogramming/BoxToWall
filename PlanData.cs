@@ -53,9 +53,9 @@ namespace AVC
     public List<Entity>
     CreateEntities(Database db, Transaction tr)
     {
-      if (IsNull) return null;
       List<Entity> ret = new();
-      foreach(PLineData pline in PLines)
+      if (IsNull || db is null || tr is null) return ret;
+      foreach (PLineData pline in PLines)
       {
         Curve curve = pline.CreateCurve(db, tr);
         if (curve is not null) ret.Add(curve);

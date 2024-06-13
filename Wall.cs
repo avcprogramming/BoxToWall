@@ -4,6 +4,8 @@ using System.Reflection;
 using System.Runtime.Serialization;
 using static System.String;
 using static System.Math;
+using System;
+
 #if BRICS
 using Teigha.Geometry;
 using CadApp = Bricscad.ApplicationServices.Application;
@@ -17,6 +19,9 @@ using CadApp = Autodesk.AutoCAD.ApplicationServices.Application;
 namespace AVC
 {
 
+  /// <summary>
+  /// назначение обращения к веб-серверу, имя вызвавшей команды. 
+  /// </summary>
   internal enum WallTarget
   {
     WallToBox, 
@@ -24,60 +29,115 @@ namespace AVC
   }
 
   /// <summary>
-  /// Вспомогательный класс для сериализации исходных данных команды BoxToWall
+  /// Вспомогательный класс для сериализации исходных данных команды BoxToWall или WallToVector
   /// </summary>
   [DataContract]
   [Obfuscation(Exclude = true, Feature = "renaming")]
   internal class
   Wall
   {
+
+    /// <summary>
+    /// назначение обращения к веб-серверу, имя вызвавшей команды. 
+    /// Пока только WallToBox или WallToVector
+    /// </summary>
     [DataMember]
     public string
     Target { get; set; } = "WallToBox";
 
+    /// <summary>
+    /// размер стены (исходного бокса) по Z
+    /// </summary>
     [DataMember]
     public double
     Height { get; set; }
 
+    /// <summary>
+    /// Наибольший из размеров основания стены
+    /// </summary>
     [DataMember]
     public double
     Width { get; set; }
 
+    /// <summary>
+    /// Наименьший из размеров основания стены. 
+    /// Если толщина путается с шириной, надо обозначить фасадную сторону цветом 30 (есть галочка в палитре свойств AVC)
+    /// </summary>
     [DataMember]
     public double
     Thickness { get; set; }
 
+    /// <summary>
+    /// Толщина материала-каркаса стены. Берется у материала исходгого солида-бокса. 
+    /// Можно назначить только через Палитру Свойств AVC в свойствах материала.
+    /// </summary>
     [DataMember]
     public double
     Frame { get; set; }
 
+    /// <summary>
+    /// Толщина материала передней облицовки стены. 
+    /// Берется у материала передней грани исходгого солида-бокса. 
+    /// Можно назначить только через Палитру Свойств AVC в свойствах покрытия.
+    /// Если 0 - надо оставить каркас без облицовки
+    /// </summary>
     [DataMember]
     public double
     Front { get; set; }
 
+    /// <summary>
+    /// Толщина материала задней облицовки стены. 
+    /// Берется у материала задней грани исходгого солида-бокса. 
+    /// Можно назначить только через Палитру Свойств AVC в свойствах покрытия.
+    /// Если 0 - надо оставить каркас без облицовки
+    /// </summary>
     [DataMember]
     public double
     Back { get; set; }
 
+    /// <summary>
+    /// Имя материала каркаса
+    /// </summary>
     [DataMember]
     public string
     FrameMat { get; set; }
 
+    /// <summary>
+    /// Имя материала передней обшивки
+    /// </summary>
     [DataMember]
     public string
     FrontMat { get; set; }
 
+    /// <summary>
+    /// Имя материала задней обшивки
+    /// </summary>
     [DataMember]
     public string
     BackMat { get; set; }
 
+    /// <summary>
+    /// Имя исходного солида-бокса (или блока в BoxToVector)
+    /// </summary>
     [DataMember]
     public string 
     Name { get; set; }
 
+    /// <summary>
+    /// Тип (Kind) исходного солида-бокса (задается в Палитре Свойств AVC)
+    /// </summary>
     [DataMember]
     public string
     Kind  { get; set; }
+
+    /// <summary>
+    /// Количество одинаковых солидов-боксов или блоков в исходных данных (не зависимо от ориентации).
+    /// Запрос на web-сервер идет только 1 раз для всех одинаковых исходных
+    /// </summary>
+    [DataMember]
+    public int
+    Count
+    { get; set; }
 
     /// <summary>
     /// матрица разворота этой стены из положения выкладки (лежа) в вертикальное положение по осям WCS
@@ -96,7 +156,7 @@ namespace AVC
     { }
 
     internal
-    Wall(WallTarget target, AvcSolid solid, double frame, double front, double back)
+    Wall(WallTarget target, AvcSolid solid, double frame, double front, double back, int count)
     {
       if (solid == null) return;
 
@@ -134,6 +194,7 @@ namespace AVC
       BackMat = "";
       Name = solid.Name;
       Kind = solid.Kind;
+      Count = count;
 
       AvcMaterial mat = solid.ActualMaterial;
       if (mat is not null && !mat.IsBuiltIn)
@@ -158,5 +219,9 @@ namespace AVC
       }
 
     }
+
+    public override string
+    ToString() => $"{Name} {Height.ApproxSize()}x{Width.ApproxSize()}x{Thickness.ApproxSize()}";
+
   }
 }

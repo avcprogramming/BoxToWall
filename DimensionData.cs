@@ -32,10 +32,18 @@ namespace AVC
   public class
   DimensionData
   {
+
+    /// <summary>
+    /// Размерный стиль. Если не существет - программа попытается вытащить такой стиль из шаблона.
+    /// Если не задан - бует текущий стиль чертежа.
+    /// </summary>
     [DataMember]
     public string 
     Style { get; set; }
 
+    /// <summary>
+    /// Точка на детали откуда тянем размер
+    /// </summary>
     [DataMember]
     public double 
     FromX { get; set; }
@@ -44,6 +52,9 @@ namespace AVC
     public double 
     FromY { get; set; }
 
+    /// <summary>
+    /// Точка на детали куда тянем размер
+    /// </summary>
     [DataMember]
     public double 
     ToX { get; set; }
@@ -52,6 +63,9 @@ namespace AVC
     public double 
     ToY { get; set; }
 
+    /// <summary>
+    /// Любая точка на размерной линии (под текстом)
+    /// </summary>
     [DataMember]
     public double 
     DimLineX { get; set; }
@@ -60,6 +74,9 @@ namespace AVC
     public double 
     DimLineY { get; set; }
 
+    /// <summary>
+    /// Разворот размера от горизонта. Градусы.
+    /// </summary>
     [DataMember]
     public double 
     Rotation { get; set; }
@@ -86,12 +103,17 @@ namespace AVC
     public double 
     Height { get; set; }
 
+    /// <summary>
+    /// Имя цвета (как он отображается в Палитре Свойств AVC). 
+    /// По умолчанию - текущий цвет чертежа.
+    /// </summary>
     [DataMember]
     public string 
     Color { get; set; }
 
     /// <summary>
-    /// Слой по умолчанию - Аннотации
+    /// Слой по умолчанию - Аннотации. 
+    /// Если слоя нет в чертеже - программа попытается вытащить его из шаблона или создаст новый.
     /// </summary>
     [DataMember]
     public string 

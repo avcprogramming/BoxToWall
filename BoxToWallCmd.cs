@@ -231,11 +231,12 @@ namespace AVC
               AvcSolid avcSolid = part.Objects[0] as AvcSolid;
               if (avcSolid is null) continue;
               Cns.Info($"Запрашиваем деталировку для стены {avcSolid}...");
-              Wall wall = new( WallTarget.WallToBox, avcSolid, Frame, Front, Back);
+              Wall wall = new( WallTarget.WallToBox, avcSolid, Frame, Front, Back, part.Count);
               BoxData[] boxes = null;
               try
               {
-                boxes = Request(wall);
+                string json = Request(wall);
+                boxes = WebServices.DeserializeFromJson<BoxData[]>(json);
               }
               catch (System.Exception ex) { Cns.Warning("Ошибка при запросе на сервер. \r\n " + ex.Message); return; }
               if (boxes is null || boxes.Length == 0)
@@ -296,37 +297,6 @@ namespace AVC
         Editor ed = doc.Editor;
         Transient.Clear();
         AvcManager.StartCash();
-
-
-        //..тест
-        PlanData plan = new()
-        {
-          Name = "Cтена_2D",
-          PLines = new PLineData[2]
-          {
-            new ( new VertexData(0,0), new VertexData(0,100), new VertexData(500,100), new VertexData(500,0), true),
-            new ( new VertexData(0,0), new VertexData(500,100))
-          },
-          Texts = new TextData[1] 
-          { 
-            new (200,105,"Это Стена!") 
-          },
-          Dimensions = new DimensionData[2] 
-          {
-            new (0,0,500,0,0,-20,0),
-            new (0,0,0,100,-20,0,90)
-          }
-        };
-
-        string s = WebServices.SerializeToJson(plan);
-        Debug.Print(s);
-        PlanData res = WebServices.DeserializeFromJson<PlanData>(s);
-        Debug.Print(res.ToString());
-
-        // Запрос списка солидов-боксов
-        ObjectId[] objectIds = CnsAcad.Select(SolidL.SelectSolids);
-        if (objectIds is null) return;
-
 #if DEMO
         CnsAcad.licChecker.ActivationIfTime();
 #endif
@@ -338,6 +308,9 @@ namespace AVC
         if (!LicenseCheck.HasLicenseFor(DbCommand.BoxToWallCmdName))
           throw new CancelException("");
 #endif
+        // Запрос списка солидов-боксов или блоков
+        ObjectId[] objectIds = CnsAcad.Select(SolidL.SelectSolids);
+        if (objectIds is null) return;
 
         // Группируем одинаковые боксы в таблицу деталей
         DataTable dt = new(GetColumns(), DTStyleEnum.Default, AvcSettings.LenStyle,
@@ -364,37 +337,74 @@ namespace AVC
               lom.TickOrEsc();
               AvcSolid avcSolid = part.Objects[0] as AvcSolid;
               if (avcSolid is null) continue;
-              Cns.Info($"Запрашиваем деталировку для стены {avcSolid}...");
-              Wall wall = new(WallTarget.WallToVector, avcSolid, Frame, Front, Back);
-              BoxData[] boxes = null;
+              Cns.Info($"Запрашиваем чертежи для стены {avcSolid}...");
+              Wall wall = new(WallTarget.WallToVector, avcSolid, Frame, Front, Back, part.Count);
+              PlanData plan2d = null;
               try
               {
-                boxes = Request(wall);
+                //string json = Request(wall);
+
+                //..тест
+                PlanData plan = new()
+                {
+                  Name = "Cтена_2D",
+                  PLines = new PLineData[2]
+                  {
+            new ( new VertexData(0,0), new VertexData(0,100), new VertexData(500,100), new VertexData(500,0), true),
+            new ( new VertexData(0,0), new VertexData(500,100))
+                  },
+                  Texts = new TextData[1]
+                  {
+            new (200,105,"Это Стена!")
+                  },
+                  Dimensions = new DimensionData[2]
+                  {
+            new (0,0,500,0,0,-20,0),
+            new (0,0,0,100,-20,0,90)
+                  }
+                };
+                string json = WebServices.SerializeToJson(plan);
+                Debug.Print(json);
+
+                plan2d = WebServices.DeserializeFromJson<PlanData>(json);
+                Debug.Print(plan2d.ToString());
               }
               catch (System.Exception ex) { Cns.Warning("Ошибка при запросе на сервер. \r\n " + ex.Message); return; }
-              if (boxes is null || boxes.Length == 0)
-              { Cns.Info("Не удалось создать одну стену"); continue; }
-              Cns.Info($"Получены {boxes.Length} деталей для стены.");
+              if (plan2d is null || plan2d.IsNull)
+              { Cns.Info($"Не удалось создать чертеж стены {wall}"); continue; }
+              Cns.Info($"Получены 2d чертежи: {plan2d}");
               lom.TickOrEsc();
 
-              // Создаем солиды-детали и ставим их вертикально
-              List<ObjectId> boxIds = CreateBoxes(boxes, db, avcSolid.Space.Id, wall);
-              if (boxIds is null || boxIds.Count == 0)
-              { Cns.Info("Не удалось создать одну стену - не получилось создать ни одной детали"); continue; }
+              // Создаем чертежи
+              List<ObjectId> ids = CreatePlan2d(plan2d, db, db.GetModelId());
+              if (ids is null || ids.Count == 0)
+              { Cns.Info("Не удалось создать плоский чертеж - не получилось создать ни одного объекта"); continue; }
 
-              ObjectId[] boxIdsArray = boxIds.ToArray();
+              ObjectId[] idsArray = ids.ToArray();
 
               using Transaction tr = db.TransactionManager.StartTransaction();
               // создание блока в начале координат без вставки
-              string newName = style.NewName(boxIdsArray, db, tr);
+              string newName = style.NewName(idsArray, db, tr) ;
               CreateBlockResult ret = BlockCreate.CreateNewBlock(
-                boxIdsArray, newName, createOpt, BlockBasePointEnum.WCS, BlockRotationEnum.WCS, Point3dExt.Null,
-                Matrix3d.Identity, style.LabelHeight, tr);
+                idsArray, newName, createOpt, BlockBasePointEnum.WCS, BlockRotationEnum.WCS, Point3dExt.Null,
+                Matrix3d.Identity, 0, tr);
               if (ret.IsNull) continue;
-              boxIds.EraseAll(tr);
+              ids.EraseAll(tr);
 
-              // вставляем блок вместо всех боксов
-              InsertBlocks(part.Objects, ret.BtrId, wall, tr);
+              // вставка чертежа
+              BlockExt.Insert(ret.BtrId, db.GetModelId(), db.Extmin + new Vector3d(0, -4000, 0), Matrix3d.Identity, tr);
+
+              // удаляем боксы
+              foreach (AvcObj obj in part.Objects)
+                if (obj is AvcSolid nextBox)
+              {
+                if (nextBox is null) continue;
+                if (!nextBox.ActualLayer?.IsLocked ?? false)
+                {
+                  Solid3d source = tr.GetObject(nextBox.Id, OpenMode.ForWrite, false, true) as Solid3d;
+                  source?.Erase();
+                }
+              }
               tr.Commit();
             }
 
@@ -434,7 +444,7 @@ namespace AVC
       new DTColumn("", "%mat%", DTColumnEnum.Asc, AvcSettings.LenStyle),
     };
 
-    private static BoxData[]
+    private static string
     Request(Wall wall)
     {
       DateTime start = DateTime.Now;
@@ -446,7 +456,7 @@ namespace AVC
       if (response.StatusCode != System.Net.HttpStatusCode.OK)
         throw new WarningException($"Ошибка сервера {response.StatusCode}:\r\n  {respStr}");
       Cns.Info($"  Запрос к серверу обработан за {(DateTime.Now - start).TotalSeconds}c");
-      return WebServices.DeserializeFromJson<BoxData[]>(respStr);
+      return respStr;
     }
 
     /// <summary>
@@ -477,6 +487,23 @@ namespace AVC
       }
       tr.Commit();
       return boxIds;
+    }
+
+    private static List<ObjectId> 
+    CreatePlan2d(PlanData plan2d, Database db, ObjectId spaceId)
+    {
+      List<ObjectId> ids = new();
+      using Transaction tr = db.TransactionManager.StartTransaction();
+      BlockTableRecord space = tr.GetObject(spaceId, OpenMode.ForWrite) as BlockTableRecord;
+      foreach(Entity entity in plan2d.CreateEntities(db, tr)) using (entity)
+        {
+          ObjectId id = space.AppendEntity(entity);
+          if (id.IsNull) continue;
+          ids.Add(id);
+          tr.AddNewlyCreatedDBObject(entity, true);
+        }
+      tr.Commit();
+      return ids;
     }
 
     private static void
