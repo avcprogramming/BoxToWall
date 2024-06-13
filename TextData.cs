@@ -80,7 +80,7 @@ namespace AVC
       MText text = MTextExt.CreateText(Content, Style, Height, Frame, db, tr);
       if (text is null) return null;
       if (IsNullOrEmpty(Style)) text.Attachment = AttachmentPoint.BottomLeft;
-      text.Rotation = Rotation;
+      text.Rotation = Rotation/180*PI;
 
       if (!IsNullOrWhiteSpace(Layer))
       {
@@ -89,7 +89,10 @@ namespace AVC
         if (!layerId.IsNull) text.LayerId = layerId;
       }
 
-      if (ColorExt.TryParseColor(Color, out Color color)) text.Color = color;
+      if (!IsNullOrWhiteSpace(Color))
+        if (ColorExt.TryParseColor(Color, out Color color)) text.Color = color;
+        else Cns.Info(BoxFromTableL.ColorErr, Color);
+
       return text;
     }
 

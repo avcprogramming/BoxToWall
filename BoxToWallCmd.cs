@@ -10,6 +10,8 @@ using System.Text;
 using System.Runtime.Serialization;
 using static System.String;
 using static System.Math;
+using System.Diagnostics;
+
 #if BRICS
 using Bricscad.ApplicationServices;
 using Teigha.DatabaseServices;
@@ -294,6 +296,32 @@ namespace AVC
         Editor ed = doc.Editor;
         Transient.Clear();
         AvcManager.StartCash();
+
+
+        //..тест
+        PlanData plan = new()
+        {
+          Name = "Cтена_2D",
+          PLines = new PLineData[2]
+          {
+            new ( new VertexData(0,0), new VertexData(0,100), new VertexData(500,100), new VertexData(500,0), true),
+            new ( new VertexData(0,0), new VertexData(500,100))
+          },
+          Texts = new TextData[1] 
+          { 
+            new (200,105,"Это Стена!") 
+          },
+          Dimensions = new DimensionData[2] 
+          {
+            new (0,0,500,0,0,-20,0),
+            new (0,0,0,100,-20,0,90)
+          }
+        };
+
+        string s = WebServices.SerializeToJson(plan);
+        Debug.Print(s);
+        PlanData res = WebServices.DeserializeFromJson<PlanData>(s);
+        Debug.Print(res.ToString());
 
         // Запрос списка солидов-боксов
         ObjectId[] objectIds = CnsAcad.Select(SolidL.SelectSolids);

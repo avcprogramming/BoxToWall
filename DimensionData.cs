@@ -4,10 +4,6 @@ using System.Reflection;
 using System.Runtime.Serialization;
 using static System.String;
 using static System.Math;
-using System;
-using OfficeOpenXml.Style;
-
-
 #if BRICS
 using Bricscad.ApplicationServices;
 using Teigha.DatabaseServices;
@@ -69,7 +65,8 @@ namespace AVC
     Rotation { get; set; }
 
     /// <summary>
-    /// Масштаб размеров для вывода правильных цифр (если задан текст, то нет смысла указывать масштаб)
+    /// Масштаб размеров для вывода правильных цифр (если задан текст, то нет смысла указывать масштаб).
+    /// 0 - это 1:1
     /// </summary>
     [DataMember]
     public double 
@@ -109,7 +106,17 @@ namespace AVC
     public 
     DimensionData() { }
 
-
+    public
+    DimensionData(double fromX, double fromY, double toX, double toY, double dimLineX, double dimLineY, double rotation)
+    { 
+      FromX = fromX;
+      FromY = fromY;
+      ToX = toX;
+      ToY = toY;
+      DimLineX = dimLineX;
+      DimLineY = dimLineY;
+      Rotation = rotation;
+    }
 
     public Dimension 
     CreateDimension(Database db, Transaction tr)
@@ -120,7 +127,7 @@ namespace AVC
       {
         XLine1Point = new Point3d(FromX, FromY, 0),
         XLine2Point = new Point3d(ToX, ToY, 0),
-        Rotation = Rotation,
+        Rotation = Rotation/180.0*PI,
         DimLinePoint = new Point3d(DimLineX, DimLineY, 0)
       };
       dim.SetDatabaseDefaults();
@@ -129,7 +136,9 @@ namespace AVC
       if (!IsNullOrWhiteSpace(Text)) dim.DimensionText = Text;
       if (Height > STol.EqPoint) dim.Dimtxt = Height;
       dim.LayerId = IsNullOrWhiteSpace(Layer) ? lm.GetOrCreate(LayerEnum.Annotation) : lm.GetOrCreate(Layer, LayerEnum.Annotation);
-      if (ColorExt.TryParseColor(Color, out Color color)) dim.Color = color;
+      if (!IsNullOrWhiteSpace(Color))
+        if (ColorExt.TryParseColor(Color, out Color color)) dim.Color = color;
+        else Cns.Info(BoxFromTableL.ColorErr, Color);
       return dim;
     }
 

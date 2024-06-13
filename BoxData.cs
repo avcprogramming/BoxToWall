@@ -137,7 +137,10 @@ namespace AVC
         ObjectId layerId = lm.GetOrCreate(Layer, LayerEnum.Visible);
         if (!layerId.IsNull) solid.LayerId = layerId;
       }
-      if (!ColorExt.TryParseColor(Color, out Color color)) color = null;
+      Color color = null;
+      if (!IsNullOrWhiteSpace(Color))
+        if (!ColorExt.TryParseColor(Color, out color)) Cns.Info(BoxFromTableL.ColorErr, Color);
+                
       ObjectId materialId = IsNullOrWhiteSpace(Material) ? ObjectId.Null
         : MaterialExt.GetOrCreate(Material, ObjectId.Null, MatUseLike.Sheet, db, tr);
       solid.SetMaterialOrColor(materialId, color, tr);

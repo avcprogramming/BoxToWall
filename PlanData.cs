@@ -1,9 +1,25 @@
 ﻿// A>V>C> avc.programming@gmail.com https://sites.google.com/site/avcplugins/
 
+using System.Collections.Generic;
 using System.Reflection;
 using System.Runtime.Serialization;
 using static System.String;
 using static System.Math;
+#if BRICS
+using Bricscad.ApplicationServices;
+using Teigha.DatabaseServices;
+using Bricscad.EditorInput;
+using Teigha.Geometry;
+using Teigha.Runtime;
+using CadApp = Bricscad.ApplicationServices.Application;
+#else
+using Autodesk.AutoCAD.ApplicationServices;
+using Autodesk.AutoCAD.DatabaseServices;
+using Autodesk.AutoCAD.EditorInput;
+using Autodesk.AutoCAD.Geometry;
+using Autodesk.AutoCAD.Runtime;
+using CadApp = Autodesk.AutoCAD.ApplicationServices.Application;
+#endif
 
 namespace AVC
 {
@@ -33,6 +49,29 @@ namespace AVC
       (Dimensions is null || Dimensions.Length == 0);
 
     public PlanData() { }
+
+    public List<Entity>
+    CreateEntities(Database db, Transaction tr)
+    {
+      if (IsNull) return null;
+      List<Entity> ret = new();
+      foreach(PLineData pline in PLines)
+      {
+        Curve curve = pline.CreateCurve(db, tr);
+        if (curve is not null) ret.Add(curve);
+      }
+      foreach (TextData text in Texts)
+      {
+        MText mt = text.CreateText(db, tr);
+        if (mt is not null) ret.Add(mt);
+      }
+      foreach (DimensionData dim in Dimensions)
+      {
+        Dimension d = dim.CreateDimension(db, tr);
+        if (d is not null) ret.Add(d);
+      }
+      return ret;
+    }
 
     public override string
     ToString() => IsNull ? "Null" : $"{Name} {PLines?.Length}|{Texts?.Length}|{Dimensions?.Length}";
