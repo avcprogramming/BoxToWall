@@ -152,7 +152,7 @@ namespace AVC
         Rotation = Rotation/180.0*PI,
         DimLinePoint = new Point3d(DimLineX, DimLineY, 0)
       };
-      dim.SetDatabaseDefaults();
+      dim.SetDatabaseDefaults(db);
       dm.SetDimStyle(dim, Style);
       if (Scale > 0.0) dim.Dimlfac /= Scale; // в стиле может быть свой масштаб
       if (!IsNullOrWhiteSpace(Text)) dim.DimensionText = Text;
@@ -161,6 +161,9 @@ namespace AVC
       if (!IsNullOrWhiteSpace(Color))
         if (ColorExt.TryParseColor(Color, out Color color)) dim.Color = color;
         else Cns.Info(BoxFromTableL.ColorErr, Color);
+      dim.Dimclrt = dim.Color;
+      dim.Dimclre = dim.Color;
+      dim.Dimclrd = dim.Color;
       return dim;
     }
 

@@ -165,6 +165,14 @@ namespace AVC
       if (target == WallTarget.WallToVector) Target = "WallToVector";
       else Target = "WallToBox";
 
+      Frame = frame;
+      Front = front;
+      Back = back;
+      FrameMat = "";
+      FrontMat = "";
+      BackMat = "";
+      Count = count;
+
       if (ent is AvcSolid solid)
       {
         Height = solid.Metric.Length;
@@ -241,14 +249,6 @@ namespace AVC
         StandUp = Matrix3d.Identity;
         LayDown = Matrix3d.Identity;
       }
-
-      Frame = frame;
-      Front = front;
-      Back = back;
-      FrameMat = "";
-      FrontMat = "";
-      BackMat = "";
-      Count = count;
     }
 
     public override string

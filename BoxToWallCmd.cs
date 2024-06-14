@@ -267,8 +267,6 @@ namespace AVC
               boxIds.EraseAll(tr);
 
               // Заполнение атрибутов
-              AvcBlock block = AvcManager.Read(ret.BtrId, tr) as AvcBlock;
-              if (block is null) continue;
               Dictionary<string, string> att = new();
               if (!IsNullOrWhiteSpace(wall.Kind))
                 att.Add("Kind", wall.Kind);
@@ -284,11 +282,21 @@ namespace AVC
                 att.Add("Front", wall.Front.ToFStr());
               if (wall.Back > 0)
                 att.Add("Back", wall.Back.ToFStr());
-              block.AddConstAttributes(att, PointOfView.WCS);
+               if (att.Count > 0)
+              {
+                AvcBlock block = AvcManager.Read(ret.BtrId, tr) as AvcBlock;
+                if (block is not null)
+                {
+                  block.AddConstAttributes(att, PointOfView.WCS);
+                  block.Save(tr);
+                }
+              }
 
               // вставляем блок вместо всех боксов
-                InsertBlocks(part.Objects, ret.BtrId, wall, tr);
+              InsertBlocks(part.Objects, ret.BtrId, wall, tr);
               tr.Commit();
+
+              count++;
             }
 
         doc.ClearSelection(); // Очистка выделения 
@@ -299,10 +307,10 @@ namespace AVC
 #endif
           ed.Regen();
           ed.UpdateScreen();
-          Cns.Info(BUpdateL.Done, count);
+          Cns.Info("Удалось создать стен {0}", count);
           //doc.SendStringToExecute("_REGENALL ", true, false, false);
         }
-        else Cns.Info(BUpdateL.NoOne);
+        else Cns.NothingInfo(); 
       }
       catch (CancelException ex) { Cns.CancelInfo(ex.Message); }
       catch (WarningException ex) { Cns.Warning(ex.Message); }
@@ -377,29 +385,29 @@ namespace AVC
               PlanData plan2d = null;
               try
               {
-                //string json = Request(wall);
+                string json = Request(wall);
 
                 //..тест
-                PlanData plan = new()
-                {
-                  Name = "Cтена_2D",
-                  PLines = new PLineData[2]
-                  {
-            new ( new VertexData(0,0), new VertexData(0,100), new VertexData(500,100), new VertexData(500,0), true),
-            new ( new VertexData(0,0), new VertexData(500,100))
-                  },
-                  Texts = new TextData[1]
-                  {
-            new (200,105,"Это Стена!")
-                  },
-                  Dimensions = new DimensionData[2]
-                  {
-            new (0,0,500,0,0,-20,0),
-            new (0,0,0,100,-20,0,90)
-                  }
-                };
-                string json = WebServices.SerializeToJson(plan);
-                Debug.Print(json);
+                //    PlanData plan = new()
+                //    {
+                //      Name = avcEnt.Name,
+                //      PLines = new PLineData[2]
+                //      {
+                //new ( new VertexData(0,0), new VertexData(0,wall.Thickness), new VertexData(wall.Width,wall.Thickness), new VertexData(wall.Width,0), true),
+                //new ( new VertexData(0,0), new VertexData(wall.Width,wall.Thickness))
+                //      },
+                //      Texts = new TextData[1]
+                //      {
+                //new (200,105, $"тут стена {avcEnt.Name} - {wall.Count}")
+                //      },
+                //      Dimensions = new DimensionData[2]
+                //      {
+                //new (0,0,wall.Width,0,0,-20,0) { Text ="Ширина=<>" },
+                //new (0,0,0,wall.Thickness,-20,0,90)
+                //      }
+                //    };
+                //string json = WebServices.SerializeToJson(plan);
+                //Debug.Print(json);
 
                 plan2d = WebServices.DeserializeFromJson<PlanData>(json);
                 Debug.Print(plan2d.ToString());
@@ -420,9 +428,8 @@ namespace AVC
               using Transaction tr = db.TransactionManager.StartTransaction();
 
               // Создание имени блока
-              string oldName = avcEnt is AvcSolid solid ? solid.Name : avcEnt is AvcBlockRef block ? block.Name : "";
               string newName = IsNullOrWhiteSpace(plan2d.Name) ?
-                IsNullOrWhiteSpace(oldName) ? style.NewName(idsArray, db, tr) : oldName : plan2d.Name;
+                IsNullOrWhiteSpace(avcEnt.Name) ? style.NewName(idsArray, db, tr) : avcEnt.Name : plan2d.Name;
               newName = DatabaseExt.ValidName(newName) + PlanPostfix;
 
               // создание блока в начале координат без вставки
@@ -449,6 +456,7 @@ namespace AVC
                 }
               }
               tr.Commit();
+              count++;
             }
 
         doc.ClearSelection(); // Очистка выделения 
@@ -459,10 +467,10 @@ namespace AVC
 #endif
           ed.Regen();
           ed.UpdateScreen();
-          Cns.Info(BUpdateL.Done, count);
+          Cns.Info("Удалось создать чертежей {0}", count);
           //doc.SendStringToExecute("_REGENALL ", true, false, false);
         }
-        else Cns.Info(BUpdateL.NoOne);
+        else Cns.NothingInfo();
       }
       catch (CancelException ex) { Cns.CancelInfo(ex.Message); }
       catch (WarningException ex) { Cns.Warning(ex.Message); }
