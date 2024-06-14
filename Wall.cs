@@ -221,10 +221,23 @@ namespace AVC
         Width = block.BTR.Size.X;
         Thickness = block.BTR.Size.Y;
         Name = block.Name;
-        Kind = "";
-        FrameMat = "";
-        FrontMat = "";
-        BackMat = "";
+        if (block.BTR.ConstAttributes.TryGetValue("Kind", out AvcAttribute att))
+          Kind = att.TextString;
+        if (block.BTR.ConstAttributes.TryGetValue("FrameMat", out att))
+          FrameMat = att.TextString;
+        if (block.BTR.ConstAttributes.TryGetValue("FrontMat", out att))
+          FrontMat = att.TextString;
+        if (block.BTR.ConstAttributes.TryGetValue("BackMat", out att))
+          BackMat = att.TextString;
+        if (block.BTR.ConstAttributes.TryGetValue("Frame", out att) &&
+          AvcSettings.LenStyle.ParseDistance(att.TextString, out double x))
+          Frame = x;
+        if (block.BTR.ConstAttributes.TryGetValue("Front", out att) &&
+          AvcSettings.LenStyle.ParseDistance(att.TextString, out x))
+          Front = x;
+        if (block.BTR.ConstAttributes.TryGetValue("Back", out att) &&
+          AvcSettings.LenStyle.ParseDistance(att.TextString, out x))
+          Back = x;
         StandUp = Matrix3d.Identity;
         LayDown = Matrix3d.Identity;
       }

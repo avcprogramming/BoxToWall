@@ -6,8 +6,6 @@ using System.Reflection;
 using System.Runtime.Serialization;
 using static System.String;
 using static System.Math;
-using Autodesk.AutoCAD.BoundaryRepresentation;
-
 #if BRICS
 using Teigha.DatabaseServices;
 using Teigha.Colors;
@@ -32,6 +30,9 @@ namespace AVC
   public class
   PLineData
   {
+    /// <summary>
+    /// Замкнутая полилиния или окружность. Последний вертекс соединен с первым.
+    /// </summary>
     [DataMember]
     public bool Closed { get; set; }
 
@@ -47,6 +48,11 @@ namespace AVC
     [DataMember]
     public double LineWeight { get; set; } = -3;
 
+    /// <summary>
+    /// Список вершин и кривизны сегментов.
+    /// Просто линия - два вертекса с Bulge=0 и Closed = false.
+    /// Для задания окружности укажите 2 вертекса на пересечении окружности с горизонталью с Bulge=1.
+    /// </summary>
     [DataMember]
     public VertexData[] Vertices { get; set; }
 
@@ -141,6 +147,16 @@ namespace AVC
     Y
     { get; set; }
 
+    /// <summary>
+    /// Выпуклость сегмента после этого вертекса. 
+    /// У последнего вертекса незамкнутой полилинии - не имеет смысла.
+    /// 0 - линейный сегмент.
+    /// >0 - дуга против часовой стрелки, <0 - по часовой. 
+    /// 1 - дуга в 180 градусов.
+    /// Вычисляется как Bulge = Tan(arc / 4), где arc - угол дуги в радианах.
+    /// Радиус кривизны дуги Radius = Length / (2.0 * Sin(Atan(Abs(Bulge)) * 2.0)), где Length - расстояние от начала до конца сегмента по прямой
+    /// Автокад не понимает Bulge меньше чем 1e-6
+    /// </summary>
     [DataMember]
     public double
     Bulge

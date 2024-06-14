@@ -219,11 +219,13 @@ namespace AVC
         }
         if (!dt.CreateTable(rawdata)) return;
 
-        // Перебираем все одинаковые боксы
+        // Подправим стиль создания блоков
         AssemblyStyle style = AssemblyStyle.GetCurrent();
         BlockCreateEnum createOpt = style.CreateOptions &
-          ~(BlockCreateEnum.LayerZero | BlockCreateEnum.MeshToSolid | BlockCreateEnum.Unite | BlockCreateEnum.Insert);
+          ~(BlockCreateEnum.LayerZero | BlockCreateEnum.MeshToSolid | BlockCreateEnum.Unite | BlockCreateEnum.Insert)
+          | BlockCreateEnum.BlockMetric;
 
+        // Перебираем все одинаковые боксы
         int count = 0;
         using (LongOperationManager lom = new("Деталировка", dt.TotalRowCount * 2))
           foreach (DTGroup group in dt.Groups)
@@ -255,6 +257,7 @@ namespace AVC
               ObjectId[] boxIdsArray = boxIds.ToArray();
 
               using Transaction tr = db.TransactionManager.StartTransaction();
+
               // создание блока в начале координат без вставки
               string newName = style.NewName(boxIdsArray, db, tr);
               CreateBlockResult ret = BlockCreate.CreateNewBlock(
@@ -263,8 +266,28 @@ namespace AVC
               if (ret.IsNull) continue;
               boxIds.EraseAll(tr);
 
+              // Заполнение атрибутов
+              AvcBlock block = AvcManager.Read(ret.BtrId, tr) as AvcBlock;
+              if (block is null) continue;
+              Dictionary<string, string> att = new();
+              if (!IsNullOrWhiteSpace(wall.Kind))
+                att.Add("Kind", wall.Kind);
+              if (!IsNullOrWhiteSpace(wall.FrameMat))
+                att.Add("FrameMat", wall.FrameMat);
+              if (!IsNullOrWhiteSpace(wall.FrontMat))
+                att.Add("FrontMat", wall.FrontMat);
+              if (!IsNullOrWhiteSpace(wall.BackMat))
+                att.Add("BackMat", wall.BackMat);
+              if (wall.Frame > 0)
+                att.Add("Frame", wall.Frame.ToFStr());
+              if (wall.Front > 0) 
+                att.Add("Front", wall.Front.ToFStr());
+              if (wall.Back > 0)
+                att.Add("Back", wall.Back.ToFStr());
+              block.AddConstAttributes(att, PointOfView.WCS);
+
               // вставляем блок вместо всех боксов
-              InsertBlocks(part.Objects, ret.BtrId, wall, tr);
+                InsertBlocks(part.Objects, ret.BtrId, wall, tr);
               tr.Commit();
             }
 
@@ -312,12 +335,12 @@ namespace AVC
           throw new CancelException("");
 #endif
         // Запрос списка солидов-боксов или блоков
-        ObjectId[] objectIds = CnsAcad.Select(SolidL.SelectSolids);
+        ObjectId[] objectIds = CnsAcad.Select(BoxFromTableL.SelectSolidOrBlock);
         if (objectIds is null) return;
 
         // Группируем одинаковые боксы в таблицу деталей
-        DataTable dt = new(GetColumns(), DTStyleEnum.Default, AvcSettings.LenStyle,
-          EntityFilterStyle.SolidTableFilter(RegKey + "\\Filter"), null, ReadEnum.ForceMeter, 1, db, PointOfView.WCS);
+        DataTable dt = new(GetColumns(), DTStyleEnum.Default, AvcSettings.LenStyle, SolidOrBlockFilter()
+          , null, ReadEnum.ForceMeter, 1, db, PointOfView.WCS);
         List<AvcDTObj> rawdata = dt.ExtractRawData(objectIds.ToSelectedObjects());
         if (rawdata is null || rawdata.Count == 0)
         {
@@ -326,7 +349,7 @@ namespace AVC
         }
         if (!dt.CreateTable(rawdata)) return;
 
-        // Перебираем все одинаковые боксы
+        // подправим стиль создания блоков-сборок
         AssemblyStyle style = AssemblyStyle.GetCurrent();
         BlockCreateEnum createOpt = style.CreateOptions &
           ~(BlockCreateEnum.LayerZero | BlockCreateEnum.MeshToSolid | BlockCreateEnum.Unite | BlockCreateEnum.Insert
@@ -334,13 +357,14 @@ namespace AVC
 
         // временная система вставки чертежей в модель
         Point3d insert = db.Extmin;
-        if (insert.X == 1e-20) insert = new Point3d(0, -5000, 0);
+        if (insert.X == 1e-20) insert = new Point3d(0, -4000, 0);
         double gap = 4000;
         insert += new Vector3d(0, -gap, 0);
         Vector3d step = new (gap, 0, 0);
 
+        // Перебираем все одинаковые боксы
         int count = 0;
-        using (LongOperationManager lom = new("Деталировка", dt.TotalRowCount * 2))
+        using (LongOperationManager lom = new("Создание чертежей", dt.TotalRowCount * 2))
           foreach (DTGroup group in dt.Groups)
             foreach (AvcDTPart part in group.Data)
             {
@@ -456,12 +480,19 @@ namespace AVC
 
     private static List<DTColumn>
     GetColumns() => new(){
+      new DTColumn("", "%name%", DTColumnEnum.Asc, AvcSettings.LenStyle),
       new DTColumn("", "%len%", DTColumnEnum.Desc, AvcSettings.LenStyle),
       new DTColumn("", "%width%", DTColumnEnum.Desc, AvcSettings.LenStyle),
       new DTColumn("", "%thickness%", DTColumnEnum.Desc, AvcSettings.LenStyle),
-      new DTColumn("", "%color%", DTColumnEnum.Asc, AvcSettings.LenStyle),
       new DTColumn("", "%mat%", DTColumnEnum.Asc, AvcSettings.LenStyle),
     };
+
+    private static EntityFilterStyle
+    SolidOrBlockFilter() => new(RegKey + "\\Filter",
+        ClassFilterEnum.Solid | ClassFilterEnum.Block,
+        EntFilterEnum.Unfrozen,
+        EntityFilterStyle.DefExtractionIgnoredLayers)
+        { PermissibleClasses = ClassFilterEnum.Solid | ClassFilterEnum.Block };
 
     private static string
     Request(Wall wall)
