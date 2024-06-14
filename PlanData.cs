@@ -32,6 +32,13 @@ namespace AVC
   public class
   PlanData
   {
+    /// <summary>
+    /// Имя чертежа. Если задано, то будет использовано для создания блока. 
+    /// Если не задано, то имя будет взято из исходного имени блока или солида,
+    /// а если и унего не задано, то блок будет создан по настройкам команды команды AsmCreate.
+    /// В любом случае к имени будет прибавлено _2d.
+    /// Если такой блок уже был в чертеже, то он буде заменен.
+    /// </summary>
     [DataMember]
     public string Name { get; set; }
 
@@ -44,8 +51,8 @@ namespace AVC
     [DataMember]
     public DimensionData[] Dimensions { get; set; }
 
-    internal bool IsNull => (PLines is null || PLines.Length == 0) && 
-      (Texts is null || Texts.Length == 0) && 
+    internal bool IsNull => (PLines is null || PLines.Length == 0) &&
+      (Texts is null || Texts.Length == 0) &&
       (Dimensions is null || Dimensions.Length == 0);
 
     public PlanData() { }
@@ -55,21 +62,27 @@ namespace AVC
     {
       List<Entity> ret = new();
       if (IsNull || db is null || tr is null) return ret;
-      foreach (PLineData pline in PLines)
-      {
-        Curve curve = pline.CreateCurve(db, tr);
-        if (curve is not null) ret.Add(curve);
-      }
-      foreach (TextData text in Texts)
-      {
-        MText mt = text.CreateText(db, tr);
-        if (mt is not null) ret.Add(mt);
-      }
-      foreach (DimensionData dim in Dimensions)
-      {
-        Dimension d = dim.CreateDimension(db, tr);
-        if (d is not null) ret.Add(d);
-      }
+
+      if (PLines is not null)
+        foreach (PLineData pline in PLines)
+        {
+          Curve curve = pline.CreateCurve(db, tr);
+          if (curve is not null) ret.Add(curve);
+        }
+
+      if (Texts is not null)
+        foreach (TextData text in Texts)
+        {
+          MText mt = text.CreateText(db, tr);
+          if (mt is not null) ret.Add(mt);
+        }
+
+      if (Dimensions is not null)
+        foreach (DimensionData dim in Dimensions)
+        {
+          Dimension d = dim.CreateDimension(db, tr);
+          if (d is not null) ret.Add(d);
+        }
       return ret;
     }
 

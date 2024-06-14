@@ -117,7 +117,8 @@ namespace AVC
     BackMat { get; set; }
 
     /// <summary>
-    /// Имя исходного солида-бокса (или блока в BoxToVector)
+    /// Имя исходного солида-бокса (или блока в BoxToVector). 
+    /// Если не пустое, то желательно его передать без изменений в PlanData.Name или в BoxData.Group у всех деталей стены
     /// </summary>
     [DataMember]
     public string 
@@ -146,7 +147,8 @@ namespace AVC
     StandUp;
 
     /// <summary>
-    /// матрица разворота этой стены из вертикальное положение по осям WCS в положения выкладки лежа с разворотом наибольшей стороной вдоль X
+    /// матрица разворота этой стены из вертикальное положение по осям WCS 
+    /// в положения выкладки лежа с разворотом наибольшей стороной вдоль X
     /// </summary>
     internal Matrix3d
     LayDown;
@@ -156,34 +158,75 @@ namespace AVC
     { }
 
     internal
-    Wall(WallTarget target, AvcSolid solid, double frame, double front, double back, int count)
+    Wall(WallTarget target, AvcEntity ent, double frame, double front, double back, int count)
     {
-      if (solid == null) return;
+      if (ent is null) return;
 
       if (target == WallTarget.WallToVector) Target = "WallToVector";
       else Target = "WallToBox";
-      Height = solid.Metric.Length;
-      Width = solid.Metric.Width;
-      Thickness = solid.Metric.Thickness;
-      StandUp = EntityExt.AlignCSTo(Point3d.Origin, Vector3d.ZAxis, Vector3d.YAxis);
-      LayDown = StandUp.Inverse();
 
-      double dZ = solid.PvExtents(PointOfView.WCS).SizeZ();
-      if (!double.IsNaN(dZ) && !Height.ApproxEqSize(dZ))
+      if (ent is AvcSolid solid)
       {
-        if (Width.ApproxEqSize(dZ))
+        Height = solid.Metric.Length;
+        Width = solid.Metric.Width;
+        Thickness = solid.Metric.Thickness;
+        Name = solid.Name;
+        Kind = solid.Kind;
+        StandUp = EntityExt.AlignCSTo(Point3d.Origin, Vector3d.ZAxis, Vector3d.YAxis);
+        LayDown = StandUp.Inverse();
+
+        double dZ = solid.PvExtents(PointOfView.WCS).SizeZ();
+        if (!double.IsNaN(dZ) && !Height.ApproxEqSize(dZ))
         {
-          Width = solid.Metric.Length;
-          Height = solid.Metric.Width;
-          LayDown = EntityExt.AlignCSTo(new Point3d(Width, 0, 0), -Vector3d.XAxis, Vector3d.YAxis);
+          if (Width.ApproxEqSize(dZ))
+          {
+            Width = solid.Metric.Length;
+            Height = solid.Metric.Width;
+            LayDown = EntityExt.AlignCSTo(new Point3d(Width, 0, 0), -Vector3d.XAxis, Vector3d.YAxis);
+          }
+          else if (Thickness.ApproxEqSize(dZ))
+          {
+            Thickness = solid.Metric.Width;
+            Width = solid.Metric.Length;
+            Height = solid.Metric.Thickness;
+            LayDown = Matrix3d.Identity;
+          }
         }
-        else if (Thickness.ApproxEqSize(dZ))
+
+        AvcMaterial mat = solid.ActualMaterial;
+        if (mat is not null && !mat.IsBuiltIn)
         {
-          Thickness = solid.Metric.Width;
-          Width = solid.Metric.Length;
-          Height = solid.Metric.Thickness;
-          LayDown = Matrix3d.Identity;
+          if (mat.Thickness > 0) Frame = mat.Thickness;
+          FrameMat = mat.Name;
         }
+
+        if (solid.Metric.HasCovers)
+        {
+          foreach (AvcSolidFace face in solid.Metric.Covers)
+            if (face.Dir == AvcSolidFace.Direction.Front && face.Material is not null && !face.Material.IsBuiltIn)
+            {
+              Front = face.Material.Thickness;
+              FrontMat = face.Material.Name;
+            }
+            else if (face.Dir == AvcSolidFace.Direction.Rear && face.Material is not null && !face.Material.IsBuiltIn)
+            {
+              Back = face.Material.Thickness;
+              BackMat = face.Material.Name;
+            }
+        }
+      }
+      else if (ent is AvcBlockRef block)
+      {
+        Height = block.BTR.Size.Z;
+        Width = block.BTR.Size.X;
+        Thickness = block.BTR.Size.Y;
+        Name = block.Name;
+        Kind = "";
+        FrameMat = "";
+        FrontMat = "";
+        BackMat = "";
+        StandUp = Matrix3d.Identity;
+        LayDown = Matrix3d.Identity;
       }
 
       Frame = frame;
@@ -192,32 +235,7 @@ namespace AVC
       FrameMat = "";
       FrontMat = "";
       BackMat = "";
-      Name = solid.Name;
-      Kind = solid.Kind;
       Count = count;
-
-      AvcMaterial mat = solid.ActualMaterial;
-      if (mat is not null && !mat.IsBuiltIn)
-      {
-        if (mat.Thickness > 0) Frame = mat.Thickness;
-        FrameMat = mat.Name;
-      }
-
-      if (solid.Metric.HasCovers)
-      {
-        foreach (AvcSolidFace face in solid.Metric.Covers)
-          if (face.Dir == AvcSolidFace.Direction.Front && face.Material is not null && !face.Material.IsBuiltIn)
-          {
-            Front = face.Material.Thickness;
-            FrontMat = face.Material.Name;
-          }
-          else if (face.Dir == AvcSolidFace.Direction.Rear && face.Material is not null && !face.Material.IsBuiltIn)
-          {
-            Back = face.Material.Thickness;
-            BackMat = face.Material.Name;
-          }
-      }
-
     }
 
     public override string

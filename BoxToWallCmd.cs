@@ -44,6 +44,9 @@ namespace AVC
     internal const string
     RegKey = "AVC_BoxToWall";
 
+    internal const string
+    PlanPostfix = "_2d";
+
     #region Дефолтные настройки
 
     public const string
@@ -326,7 +329,15 @@ namespace AVC
         // Перебираем все одинаковые боксы
         AssemblyStyle style = AssemblyStyle.GetCurrent();
         BlockCreateEnum createOpt = style.CreateOptions &
-          ~(BlockCreateEnum.LayerZero | BlockCreateEnum.MeshToSolid | BlockCreateEnum.Unite | BlockCreateEnum.Insert);
+          ~(BlockCreateEnum.LayerZero | BlockCreateEnum.MeshToSolid | BlockCreateEnum.Unite | BlockCreateEnum.Insert
+          | BlockCreateEnum.LabelOnTop | BlockCreateEnum.LableOnFront);
+
+        // временная система вставки чертежей в модель
+        Point3d insert = db.Extmin;
+        if (insert.X == 1e-20) insert = new Point3d(0, -5000, 0);
+        double gap = 4000;
+        insert += new Vector3d(0, -gap, 0);
+        Vector3d step = new (gap, 0, 0);
 
         int count = 0;
         using (LongOperationManager lom = new("Деталировка", dt.TotalRowCount * 2))
@@ -335,10 +346,10 @@ namespace AVC
             {
               // для первого попавшегося бокса среди одинаковых создаем деталировку стены
               lom.TickOrEsc();
-              AvcSolid avcSolid = part.Objects[0] as AvcSolid;
-              if (avcSolid is null) continue;
-              Cns.Info($"Запрашиваем чертежи для стены {avcSolid}...");
-              Wall wall = new(WallTarget.WallToVector, avcSolid, Frame, Front, Back, part.Count);
+              AvcEntity avcEnt = part.Objects[0] as AvcEntity;
+              if (avcEnt is null) continue;
+              Cns.Info($"Запрашиваем чертежи для стены {avcEnt}...");
+              Wall wall = new(WallTarget.WallToVector, avcEnt, Frame, Front, Back, part.Count);
               PlanData plan2d = null;
               try
               {
@@ -383,8 +394,14 @@ namespace AVC
               ObjectId[] idsArray = ids.ToArray();
 
               using Transaction tr = db.TransactionManager.StartTransaction();
+
+              // Создание имени блока
+              string oldName = avcEnt is AvcSolid solid ? solid.Name : avcEnt is AvcBlockRef block ? block.Name : "";
+              string newName = IsNullOrWhiteSpace(plan2d.Name) ?
+                IsNullOrWhiteSpace(oldName) ? style.NewName(idsArray, db, tr) : oldName : plan2d.Name;
+              newName = DatabaseExt.ValidName(newName) + PlanPostfix;
+
               // создание блока в начале координат без вставки
-              string newName = style.NewName(idsArray, db, tr) ;
               CreateBlockResult ret = BlockCreate.CreateNewBlock(
                 idsArray, newName, createOpt, BlockBasePointEnum.WCS, BlockRotationEnum.WCS, Point3dExt.Null,
                 Matrix3d.Identity, 0, tr);
@@ -392,7 +409,9 @@ namespace AVC
               ids.EraseAll(tr);
 
               // вставка чертежа
-              BlockExt.Insert(ret.BtrId, db.GetModelId(), db.Extmin + new Vector3d(0, -4000, 0), Matrix3d.Identity, tr);
+
+              BlockExt.Insert(ret.BtrId, db.GetModelId(), insert, Matrix3d.Identity, tr);
+              insert += step;
 
               // удаляем боксы
               foreach (AvcObj obj in part.Objects)
