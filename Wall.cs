@@ -70,6 +70,7 @@ namespace AVC
     /// <summary>
     /// Толщина материала-каркаса стены. Берется у материала исходгого солида-бокса. 
     /// Можно назначить только через Палитру Свойств AVC в свойствах материала.
+    /// Если не задан материал, то по умолчанию -1 (веб-сервер пусть сам решает какую толщину делать)
     /// </summary>
     [DataMember]
     public double
@@ -80,6 +81,7 @@ namespace AVC
     /// Берется у материала передней грани исходгого солида-бокса. 
     /// Можно назначить только через Палитру Свойств AVC в свойствах покрытия.
     /// Если 0 - надо оставить каркас без облицовки
+    /// Если не задан материал, то по умолчанию -1 (веб-сервер пусть сам решает какую толщину делать)
     /// </summary>
     [DataMember]
     public double
@@ -90,6 +92,7 @@ namespace AVC
     /// Берется у материала задней грани исходгого солида-бокса. 
     /// Можно назначить только через Палитру Свойств AVC в свойствах покрытия.
     /// Если 0 - надо оставить каркас без облицовки
+    /// Если не задан материал, то по умолчанию -1 (веб-сервер пусть сам решает какую толщину делать)
     /// </summary>
     [DataMember]
     public double
@@ -118,7 +121,7 @@ namespace AVC
 
     /// <summary>
     /// Имя исходного солида-бокса (или блока в BoxToVector). 
-    /// Если не пустое, то желательно его передать без изменений в PlanData.Name или в BoxData.Group у всех деталей стены
+    /// Если не пустое, то желательно его передать без изменений в PlanData.Name или в BoxData.Owner у всех деталей стены
     /// </summary>
     [DataMember]
     public string 
@@ -158,27 +161,27 @@ namespace AVC
     { }
 
     internal
-    Wall(WallTarget target, AvcEntity ent, double frame, double front, double back, int count)
+    Wall(WallTarget target, AvcEntity ent, int count)
     {
       if (ent is null) return;
 
       if (target == WallTarget.WallToVector) Target = "WallToVector";
       else Target = "WallToBox";
 
-      Frame = frame;
-      Front = front;
-      Back = back;
+      Frame = -1;
+      Front = -1;
+      Back = -1;
       FrameMat = "";
       FrontMat = "";
       BackMat = "";
       Count = count;
+      Name = DatabaseExt.ValidName(ent.Name);
 
       if (ent is AvcSolid solid)
       {
         Height = solid.Metric.Length;
         Width = solid.Metric.Width;
         Thickness = solid.Metric.Thickness;
-        Name = solid.Name;
         Kind = solid.Kind;
         StandUp = EntityExt.AlignCSTo(Point3d.Origin, Vector3d.ZAxis, Vector3d.YAxis);
         LayDown = StandUp.Inverse();
@@ -213,12 +216,12 @@ namespace AVC
           foreach (AvcSolidFace face in solid.Metric.Covers)
             if (face.Dir == AvcSolidFace.Direction.Front && face.Material is not null && !face.Material.IsBuiltIn)
             {
-              Front = face.Material.Thickness;
+              if (face.Material.Thickness > 0) Front = face.Material.Thickness;
               FrontMat = face.Material.Name;
             }
             else if (face.Dir == AvcSolidFace.Direction.Rear && face.Material is not null && !face.Material.IsBuiltIn)
             {
-              Back = face.Material.Thickness;
+              if (face.Material.Thickness > 0) Back = face.Material.Thickness;
               BackMat = face.Material.Name;
             }
         }
@@ -228,7 +231,6 @@ namespace AVC
         Height = block.BTR.Size.Z;
         Width = block.BTR.Size.X;
         Thickness = block.BTR.Size.Y;
-        Name = block.Name;
         if (block.BTR.ConstAttributes.TryGetValue("Kind", out AvcAttribute att))
           Kind = att.TextString;
         if (block.BTR.ConstAttributes.TryGetValue("FrameMat", out att))

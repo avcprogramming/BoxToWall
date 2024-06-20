@@ -11,6 +11,10 @@ using System.Runtime.Serialization;
 using static System.String;
 using static System.Math;
 using System.Diagnostics;
+using System.Windows;
+using System.Xml.Linq;
+
+
 
 #if BRICS
 using Bricscad.ApplicationServices;
@@ -42,140 +46,7 @@ namespace AVC
   BoxToWallCmd
   {
     internal const string
-    RegKey = "AVC_BoxToWall";
-
-    internal const string
     PlanPostfix = "_2d";
-
-    #region Дефолтные настройки
-
-    public const string
-    DefServerAddress = "http://acadapi.vars.ru";
-
-    public const double
-    DefFrame = -1;
-
-    public const double
-    DefFront = -1;
-
-    public const double
-    DefBack = -1;
-
-    #endregion
-
-    //=============================================================================================================
-    #region Поля
-
-    private static string
-    _serverAddress = null;
-
-    private static double
-    _frame = double.NaN;
-
-    private static double
-    _front = double.NaN;
-
-    private static double
-    _back = double.NaN;
-
-    #endregion
-
-    //=============================================================================================================
-    #region Настройки в реестре
-
-
-    public static string
-    ServerAddress
-    {
-      get
-      {
-        if (_serverAddress == null)
-          _serverAddress = Reg.GetCUStr(RegKey, "ServerAddress", DefServerAddress);
-        return _serverAddress;
-      }
-      set
-      {
-        if (IsNullOrEmpty(value) || value == DefServerAddress)
-        {
-          _serverAddress = DefServerAddress;
-          Reg.DelCUVal(RegKey, "ServerAddress");
-        }
-        else
-        {
-          _serverAddress = value;
-          Reg.SetCUStr(RegKey, "ServerAddress", value);
-        }
-      }
-    }
-
-    public static double
-    Frame
-    {
-      get
-      {
-        if (double.IsNaN(_frame))
-        {
-          _frame = Reg.GetCUDbl(RegKey, "Frame", DefFrame);
-        }
-        return _frame;
-      }
-      set
-      {
-        if (value < STol.EqPoint) _frame = DefFrame;
-        else _frame = value;
-        if (_frame == DefFrame)
-          Reg.DelCUVal(RegKey, "Frame");
-        else
-          Reg.SetCUDbl(RegKey, "Frame", value);
-      }
-    }
-
-    public static double
-    Front
-    {
-      get
-      {
-        if (double.IsNaN(_front))
-        {
-          _front = Reg.GetCUDbl(RegKey, "Front", DefFront);
-        }
-        return _front;
-      }
-      set
-      {
-        if (value < STol.EqPoint) _front = DefFront;
-        else _front = value;
-        if (_front == DefFront)
-          Reg.DelCUVal(RegKey, "Front");
-        else
-          Reg.SetCUDbl(RegKey, "Front", value);
-      }
-    }
-
-    public static double
-    Back
-    {
-      get
-      {
-        if (double.IsNaN(_back))
-        {
-          _back = Reg.GetCUDbl(RegKey, "Back", DefBack);
-        }
-        return _back;
-      }
-      set
-      {
-        if (value < STol.EqPoint) _back = DefBack;
-        else _back = value;
-        if (_back == DefBack)
-          Reg.DelCUVal(RegKey, "Back");
-        else
-          Reg.SetCUDbl(RegKey, "Back", value);
-      }
-    }
-
-    #endregion
-    //=============================================================================================================
 
 #if !RENT
     [Rt.CommandMethod(InitializationPlugin.commandGroup, DbCommand.BoxToWallCmdName, Rt.CommandFlags.UsePickSet | Rt.CommandFlags.Redraw)]
@@ -210,7 +81,7 @@ namespace AVC
 
         // Группируем одинаковые боксы в таблицу деталей
         DataTable dt = new(GetColumns(), DTStyleEnum.Default, AvcSettings.LenStyle,
-          EntityFilterStyle.SolidTableFilter(RegKey + "\\Filter"), null, ReadEnum.ForceMeter, 1, db, PointOfView.WCS);
+          EntityFilterStyle.SolidTableFilter(null), null, ReadEnum.ForceMeter, 1, db, PointOfView.WCS);
         List<AvcDTObj> rawdata = dt.ExtractRawData(objectIds.ToSelectedObjects());
         if (rawdata is null || rawdata.Count == 0)
         {
@@ -219,15 +90,11 @@ namespace AVC
         }
         if (!dt.CreateTable(rawdata)) return;
 
-        // Подправим стиль создания блоков
-        AssemblyStyle style = AssemblyStyle.GetCurrent();
-        BlockCreateEnum createOpt = style.CreateOptions &
-          ~(BlockCreateEnum.LayerZero | BlockCreateEnum.MeshToSolid | BlockCreateEnum.Unite | BlockCreateEnum.Insert)
-          | BlockCreateEnum.BlockMetric;
+        BoxFromTableStyle createBoxStyle = BoxFromTableStyle.GetCurrent();
 
         // Перебираем все одинаковые боксы
         int count = 0;
-        using (LongOperationManager lom = new("Деталировка", dt.TotalRowCount * 2))
+        using (LongOperationManager lom = new(BoxFromTableL.BoxToWallProgress, dt.TotalRowCount * 2))
           foreach (DTGroup group in dt.Groups)
             foreach (AvcDTPart part in group.Data)
             {
@@ -235,67 +102,59 @@ namespace AVC
               lom.TickOrEsc();
               AvcSolid avcSolid = part.Objects[0] as AvcSolid;
               if (avcSolid is null) continue;
-              Cns.Info($"Запрашиваем деталировку для стены {avcSolid}...");
-              Wall wall = new( WallTarget.WallToBox, avcSolid, Frame, Front, Back, part.Count);
+              Cns.Info(BoxFromTableL.RequestForBox, avcSolid);
+              Wall wall = new(WallTarget.WallToBox, avcSolid, part.Count);
               BoxData[] boxes = null;
               try
               {
-                string json = Request(wall);
+                string json = Request(createBoxStyle.ServerAddress, wall);
                 boxes = WebServices.DeserializeFromJson<BoxData[]>(json);
               }
-              catch (System.Exception ex) { Cns.Warning("Ошибка при запросе на сервер. \r\n " + ex.Message); return; }
+              catch (Exception ex) { Cns.Warning(BoxFromTableL.RequestError, ex.Message); return; }
               if (boxes is null || boxes.Length == 0)
-              { Cns.Info("Не удалось создать одну стену"); continue; }
-              Cns.Info($"Получены {boxes.Length} деталей для стены.");
+              { Cns.Info(BoxFromTableL.ZeroBoxDataError, wall); continue; }
+              Cns.Info(BoxFromTableL.BoxDataReceived, boxes.Length, wall);
               lom.TickOrEsc();
 
-              // Создаем солиды-детали и ставим их вертикально
-              List<ObjectId> boxIds = CreateBoxes(boxes, db, avcSolid.Space.Id, wall);
-              if (boxIds is null || boxIds.Count == 0)
-              { Cns.Info("Не удалось создать одну стену - не получилось создать ни одной детали"); continue; }
+              foreach (BoxData box in boxes)
+                if (IsNullOrWhiteSpace(box.Shape)) box.Shape = "Box";
 
-              ObjectId[] boxIdsArray = boxIds.ToArray();
+              ObjectId btrId = CreateWall(boxes, wall.Name, wall.StandUp, createBoxStyle.Flags, db);
+              if (btrId.IsNull) continue;
 
-              using Transaction tr = db.TransactionManager.StartTransaction();
-
-              // создание блока в начале координат без вставки
-              string newName = style.NewName(boxIdsArray, db, tr);
-              CreateBlockResult ret = BlockCreate.CreateNewBlock(
-                boxIdsArray, newName, createOpt, BlockBasePointEnum.WCS, BlockRotationEnum.WCS, Point3dExt.Null,
-                Matrix3d.Identity, style.LabelHeight, tr);
-              if (ret.IsNull) continue;
-              boxIds.EraseAll(tr);
-
-              // Заполнение атрибутов
-              Dictionary<string, string> att = new();
-              if (!IsNullOrWhiteSpace(wall.Kind))
-                att.Add("Kind", wall.Kind);
-              if (!IsNullOrWhiteSpace(wall.FrameMat))
-                att.Add("FrameMat", wall.FrameMat);
-              if (!IsNullOrWhiteSpace(wall.FrontMat))
-                att.Add("FrontMat", wall.FrontMat);
-              if (!IsNullOrWhiteSpace(wall.BackMat))
-                att.Add("BackMat", wall.BackMat);
-              if (wall.Frame > 0)
-                att.Add("Frame", wall.Frame.ToFStr());
-              if (wall.Front > 0) 
-                att.Add("Front", wall.Front.ToFStr());
-              if (wall.Back > 0)
-                att.Add("Back", wall.Back.ToFStr());
-               if (att.Count > 0)
+              if (createBoxStyle.Flags.HasFlag(CreateBoxEnum.MakeBlock) && btrId.ObjectClass == BlockExt.dbBTR)
               {
-                AvcBlock block = AvcManager.Read(ret.BtrId, tr) as AvcBlock;
-                if (block is not null)
+                // Заполнение атрибутов
+                using Transaction tr = db.TransactionManager.StartTransaction();
+                Dictionary<string, string> att = new();
+                if (!IsNullOrWhiteSpace(wall.Kind))
+                  att.Add("Kind", wall.Kind);
+                if (!IsNullOrWhiteSpace(wall.FrameMat))
+                  att.Add("FrameMat", wall.FrameMat);
+                if (!IsNullOrWhiteSpace(wall.FrontMat))
+                  att.Add("FrontMat", wall.FrontMat);
+                if (!IsNullOrWhiteSpace(wall.BackMat))
+                  att.Add("BackMat", wall.BackMat);
+                if (wall.Frame > 0)
+                  att.Add("Frame", wall.Frame.ToFStr());
+                if (wall.Front > 0)
+                  att.Add("Front", wall.Front.ToFStr());
+                if (wall.Back > 0)
+                  att.Add("Back", wall.Back.ToFStr());
+                if (att.Count > 0)
                 {
-                  block.AddConstAttributes(att, PointOfView.WCS);
-                  block.Save(tr);
+                  AvcBlock block = AvcManager.Read(btrId, tr) as AvcBlock;
+                  if (block is not null)
+                  {
+                    block.AddConstAttributes(att, PointOfView.WCS);
+                    block.Save(tr);
+                  }
                 }
+
+                // вставляем блок вместо всех боксов
+                InsertBlocks(part.Objects, btrId, wall, tr);
+                tr.Commit();
               }
-
-              // вставляем блок вместо всех боксов
-              InsertBlocks(part.Objects, ret.BtrId, wall, tr);
-              tr.Commit();
-
               count++;
             }
 
@@ -307,10 +166,10 @@ namespace AVC
 #endif
           ed.Regen();
           ed.UpdateScreen();
-          Cns.Info("Удалось создать стен {0}", count);
+          Cns.Info(BoxFromTableL.BoxToWallResult, count);
           //doc.SendStringToExecute("_REGENALL ", true, false, false);
         }
-        else Cns.NothingInfo(); 
+        else Cns.NothingInfo();
       }
       catch (CancelException ex) { Cns.CancelInfo(ex.Message); }
       catch (WarningException ex) { Cns.Warning(ex.Message); }
@@ -339,7 +198,7 @@ namespace AVC
 #endif
 #if RENT || VARS
         DocExt.ThirdTest = db.BlockTableId; // проверка  в AssemblyStyle.NewName
-        if (!LicenseCheck.HasLicenseFor(DbCommand.BoxToWallCmdName))
+        if (!LicenseCheck.HasLicenseFor(DbCommand.BoxToVectorCmdName))
           throw new CancelException("");
 #endif
         // Запрос списка солидов-боксов или блоков
@@ -362,17 +221,18 @@ namespace AVC
         BlockCreateEnum createOpt = style.CreateOptions &
           ~(BlockCreateEnum.LayerZero | BlockCreateEnum.MeshToSolid | BlockCreateEnum.Unite | BlockCreateEnum.Insert
           | BlockCreateEnum.LabelOnTop | BlockCreateEnum.LableOnFront);
+        BoxFromTableStyle createBoxStyle = BoxFromTableStyle.GetCurrent();
 
         // временная система вставки чертежей в модель
         Point3d insert = db.Extmin;
         if (insert.X == 1e-20) insert = new Point3d(0, -4000, 0);
         double gap = 4000;
         insert += new Vector3d(0, -gap, 0);
-        Vector3d step = new (gap, 0, 0);
+        Vector3d step = new(gap, 0, 0);
 
         // Перебираем все одинаковые боксы
         int count = 0;
-        using (LongOperationManager lom = new("Создание чертежей", dt.TotalRowCount * 2))
+        using (LongOperationManager lom = new(BoxFromTableL.BoxtToVectorProgress, dt.TotalRowCount * 2))
           foreach (DTGroup group in dt.Groups)
             foreach (AvcDTPart part in group.Data)
             {
@@ -380,13 +240,12 @@ namespace AVC
               lom.TickOrEsc();
               AvcEntity avcEnt = part.Objects[0] as AvcEntity;
               if (avcEnt is null) continue;
-              Cns.Info($"Запрашиваем чертежи для стены {avcEnt}...");
-              Wall wall = new(WallTarget.WallToVector, avcEnt, Frame, Front, Back, part.Count);
+              Cns.Info(BoxFromTableL.RequestForVector, avcEnt);
+              Wall wall = new(WallTarget.WallToVector, avcEnt, part.Count);
               PlanData plan2d = null;
               try
               {
-                string json = Request(wall);
-
+                string json = Request(createBoxStyle.ServerAddress, wall);
                 //..тест
                 //    PlanData plan = new()
                 //    {
@@ -412,16 +271,16 @@ namespace AVC
                 plan2d = WebServices.DeserializeFromJson<PlanData>(json);
                 Debug.Print(plan2d.ToString());
               }
-              catch (System.Exception ex) { Cns.Warning("Ошибка при запросе на сервер. \r\n " + ex.Message); return; }
+              catch (System.Exception ex) { Cns.Warning(BoxFromTableL.RequestError, ex.Message); return; }
               if (plan2d is null || plan2d.IsNull)
-              { Cns.Info($"Не удалось создать чертеж стены {wall}"); continue; }
-              Cns.Info($"Получены 2d чертежи: {plan2d}");
+              { Cns.Info(BoxFromTableL.NullPlanError, wall); continue; }
+              Cns.Info(BoxFromTableL.PlanDataReceived, plan2d);
               lom.TickOrEsc();
 
               // Создаем чертежи
               List<ObjectId> ids = CreatePlan2d(plan2d, db, db.GetModelId());
               if (ids is null || ids.Count == 0)
-              { Cns.Info("Не удалось создать плоский чертеж - не получилось создать ни одного объекта"); continue; }
+              { Cns.Info(BoxFromTableL.ZeroPlanError, plan2d.Name); continue; }
 
               ObjectId[] idsArray = ids.ToArray();
 
@@ -440,21 +299,20 @@ namespace AVC
               ids.EraseAll(tr);
 
               // вставка чертежа
-
               BlockExt.Insert(ret.BtrId, db.GetModelId(), insert, Matrix3d.Identity, tr);
               insert += step;
 
               // удаляем боксы
               foreach (AvcObj obj in part.Objects)
                 if (obj is AvcSolid nextBox)
-              {
-                if (nextBox is null) continue;
-                if (!nextBox.ActualLayer?.IsLocked ?? false)
                 {
-                  Solid3d source = tr.GetObject(nextBox.Id, OpenMode.ForWrite, false, true) as Solid3d;
-                  source?.Erase();
+                  if (nextBox is null) continue;
+                  if (!nextBox.ActualLayer?.IsLocked ?? false)
+                  {
+                    Solid3d source = tr.GetObject(nextBox.Id, OpenMode.ForWrite, false, true) as Solid3d;
+                    source?.Erase();
+                  }
                 }
-              }
               tr.Commit();
               count++;
             }
@@ -467,8 +325,8 @@ namespace AVC
 #endif
           ed.Regen();
           ed.UpdateScreen();
-          Cns.Info("Удалось создать чертежей {0}", count);
-          //doc.SendStringToExecute("_REGENALL ", true, false, false);
+          Cns.Info(BoxFromTableL.BoxToVectorResult, count);
+          doc.SendStringToExecute("_REGENALL ", true, false, false);
         }
         else Cns.NothingInfo();
       }
@@ -477,13 +335,109 @@ namespace AVC
       catch (System.Exception ex) { Cns.Err(ex); }
     }
 
-    internal static void
-    SetDefault()
+    internal static ObjectId
+    CreateWall(BoxData[] boxes, string blockName, Matrix3d transform, CreateBoxEnum flags, Database db)
     {
-      Frame = DefFrame;
-      Front = DefFront;
-      Back = DefBack;
-      ServerAddress = DefServerAddress;
+      string up = blockName.ToUpper();
+      bool toModel = up == "MODEL" || up == "*MODEL_SPACE";
+
+      // Создаем солиды-детали и ставим их вертикально
+      List<ObjectId> boxIds = CreateBoxes(boxes, db, db.GetModelId(), transform);
+      if (boxIds is null || boxIds.Count == 0)
+      { 
+        if (!toModel) Cns.Info(BoxFromTableL.ZeroSolidListError, blockName); 
+        return ObjectId.Null; 
+      }
+      ObjectId[] boxIdsArray = boxIds.ToArray();
+
+      if (flags.HasFlag(CreateBoxEnum.Drill))
+      {
+        string hl = DrillOptions.HolesLayerName.ToUpper();
+        if (IsNullOrWhiteSpace(hl)) Cns.Info(DrillL.LayerNotSpecified);
+        else
+        {
+          // Поищем, есть ли среди боксов дырки для сверления
+          bool hasHoles = false;
+          foreach (BoxData boxData in boxes) 
+            if (hl.Equals(boxData.Layer, StringComparison.OrdinalIgnoreCase) || boxData.IsBlock)
+            { hasHoles = true; break; }
+          if (hasHoles)
+          {
+#if RENT || VARS
+            DocExt.ThirdTest = db.BlockTableId; // проверка в Subtraction
+            if (!LicenseCheck.HasLicenseFor(DbCommand.DrillCmdName))
+              throw new CancelException("");
+#endif
+
+            try
+            {
+              Cns.Info(DrillL.Drilling);
+              int count = Drill.MakeDrill(boxIdsArray, hl, db);
+              if (count > 0)
+              {
+                // Удалим ID дырок
+                boxIds = new();
+                foreach (ObjectId oldId in boxIdsArray)
+                  if (!oldId.IsNull && !oldId.IsErased) boxIds.Add(oldId);
+                boxIdsArray = boxIds.ToArray();
+              }
+            }
+            catch(WarningException ex) { Cns.Info(ex.Message); }
+          }
+        }
+      }
+
+      ObjectId retId = boxIds[0];
+      if (!toModel && (flags.HasFlag(CreateBoxEnum.MakeBlock) || flags.HasFlag(CreateBoxEnum.MakeGroup)))
+      {
+        AssemblyStyle style = AssemblyStyle.GetCurrent();
+        using Transaction tr = db.TransactionManager.StartTransaction();
+        string newName = IsNullOrWhiteSpace(blockName) ?
+          style.NewName(boxIdsArray, db, tr) : DatabaseExt.ValidName(blockName);
+        if (flags.HasFlag(CreateBoxEnum.MakeBlock)) // создание блока
+        {
+          // Подправим стиль создания блоков
+          BlockCreateEnum createOpt = style.CreateOptions &
+            ~(BlockCreateEnum.LayerZero | BlockCreateEnum.MeshToSolid | BlockCreateEnum.Unite | BlockCreateEnum.Insert)
+            | BlockCreateEnum.BlockMetric;
+
+          // создание блока в начале координат без вставки
+          CreateBlockResult ret = BlockCreate.CreateNewBlock(
+            boxIdsArray, newName, createOpt, BlockBasePointEnum.WCS, BlockRotationEnum.WCS, Point3dExt.Null,
+            Matrix3d.Identity, style.LabelHeight, tr);
+          if (ret.IsNull) return ObjectId.Null;
+          boxIds.EraseAll(tr);
+          retId = ret.BtrId;
+        }
+        else if (flags.HasFlag(CreateBoxEnum.MakeGroup)) // создание группы
+        {
+          Cns.Info(BoxFromTableL.CreateGroup, newName);
+          Group group;
+          DBDictionary dic = tr.GetObject(db.GroupDictionaryId, OpenMode.ForWrite) as DBDictionary;
+          if (dic is null) return ObjectId.Null;
+          if (dic.Contains(newName)) // старая группа - заменяем все объекты
+          {
+            retId = dic.GetAt(newName);
+            group = tr.GetObject(retId, OpenMode.ForWrite) as Group;
+            if (group is null) return ObjectId.Null;
+            ObjectId[] oldIds = group.GetAllEntityIds();
+            foreach (ObjectId oldId in oldIds)
+              group.Remove(oldId);
+          }
+          else // новая группа
+          {
+            group = new(AvcWeb.AvcADLink, true);
+            retId = dic.SetAt(newName, group);
+            tr.AddNewlyCreatedDBObject(group, true);
+          }
+
+          foreach (ObjectId entId in boxIds)
+            group.Append(entId);
+        }
+        tr.Commit();
+      }
+
+      return retId;
     }
 
     private static List<DTColumn>
@@ -496,24 +450,24 @@ namespace AVC
     };
 
     private static EntityFilterStyle
-    SolidOrBlockFilter() => new(RegKey + "\\Filter",
+    SolidOrBlockFilter() => new(null,
         ClassFilterEnum.Solid | ClassFilterEnum.Block,
         EntFilterEnum.Unfrozen,
         EntityFilterStyle.DefExtractionIgnoredLayers)
-        { PermissibleClasses = ClassFilterEnum.Solid | ClassFilterEnum.Block };
+    { PermissibleClasses = ClassFilterEnum.Solid | ClassFilterEnum.Block };
 
     private static string
-    Request(Wall wall)
+    Request(string server, Wall wall)
     {
       DateTime start = DateTime.Now;
       using HttpClient httpClient = new();
       string jsonSerialized = WebServices.SerializeToJson(wall);
       using StringContent content = new(jsonSerialized, Encoding.UTF8, "application/json");
-      using HttpResponseMessage response = httpClient.PostAsync(DefServerAddress, content).Result;
+      using HttpResponseMessage response = httpClient.PostAsync(server, content).Result;
       string respStr = response.Content.ReadAsStringAsync().Result;
       if (response.StatusCode != System.Net.HttpStatusCode.OK)
-        throw new WarningException($"Ошибка сервера {response.StatusCode}:\r\n  {respStr}");
-      Cns.Info($"  Запрос к серверу обработан за {(DateTime.Now - start).TotalSeconds}c");
+        throw new WarningException($"Web server error {response.StatusCode}:\r\n  {respStr}");
+      Cns.Info(BoxFromTableL.RequestTime, (DateTime.Now - start).TotalSeconds);
       return respStr;
     }
 
@@ -521,22 +475,23 @@ namespace AVC
     /// Создаем солиды-детали и ставим их вертикально
     /// </summary>
     private static List<ObjectId>
-    CreateBoxes(BoxData[] boxes, Database db, ObjectId spaceId, Wall wall)
+    CreateBoxes(BoxData[] boxes, Database db, ObjectId spaceId, Matrix3d transform)
     {
-      List<ObjectId> boxIds = new (boxes.Length);
+      List<ObjectId> boxIds = new(boxes.Length);
       using Transaction tr = db.TransactionManager.StartTransaction();
       BlockTableRecord space = tr.GetObject(spaceId, OpenMode.ForWrite) as BlockTableRecord;
       for (int i = 0; i < boxes.Length; i++)
       {
+        LongOperationManager.TryTickOrEsc();
         if (boxes[i].IsZeroSize)
         {
-          Cns.Info($"Попытка создать солид нулевого размера. Пропускаем.");
+          Cns.Info(BoxFromTableL.ZeroSizeSolidError);
           continue;
         }
 
-        using Solid3d entity = boxes[i].CreateSolid(db, tr);
+        using Entity entity = boxes[i].IsBlock ? boxes[i].CreateBlock(db,tr) : boxes[i].CreateSolid(db, tr);
         if (entity is null) continue;
-        entity.TransformBy(wall.StandUp);
+        entity.TransformBy(transform);
         //Transient.DebugDraw(entity, 2);
         ObjectId boxId = space.AppendEntity(entity);
         if (boxId.IsNull) continue;
@@ -547,13 +502,13 @@ namespace AVC
       return boxIds;
     }
 
-    private static List<ObjectId> 
+    private static List<ObjectId>
     CreatePlan2d(PlanData plan2d, Database db, ObjectId spaceId)
     {
       List<ObjectId> ids = new();
       using Transaction tr = db.TransactionManager.StartTransaction();
       BlockTableRecord space = tr.GetObject(spaceId, OpenMode.ForWrite) as BlockTableRecord;
-      foreach(Entity entity in plan2d.CreateEntities(db, tr)) using (entity)
+      foreach (Entity entity in plan2d.CreateEntities(db, tr)) using (entity)
         {
           ObjectId id = space.AppendEntity(entity);
           if (id.IsNull) continue;
