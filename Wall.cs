@@ -46,6 +46,15 @@ namespace AVC
     Target { get; set; } = "WallToBox";
 
     /// <summary>
+    /// Текущий выбраный язык плагинов на момент обращения к веб-серверу. 
+    /// En, Ru, It, Ge, Zh
+    /// </summary>
+    [DataMember]
+    public string
+    Local
+    { get; set; } 
+
+    /// <summary>
     /// размер стены (исходного бокса) по Z
     /// </summary>
     [DataMember]
@@ -167,6 +176,7 @@ namespace AVC
 
       if (target == WallTarget.WallToVector) Target = "WallToVector";
       else Target = "WallToBox";
+      Local = Cns.LngCode;
 
       Frame = -1;
       Front = -1;

@@ -139,15 +139,7 @@ namespace AVC
     /// Не задан владелец или Model
     /// </summary>
     internal bool
-    ToModel
-    {
-      get
-      {
-        if (IsNullOrWhiteSpace(Owner)) return true;
-        string up = Owner.ToUpper();
-        return up == "MODEL" || up == "*MODEL_SPACE";
-      }
-    }
+    ToModel => IsModel(Owner);
 
     /// <summary>
     /// Любой размер меньше STol.EqPoint
@@ -215,6 +207,12 @@ namespace AVC
       if (columns.Length > 16 && columns[16] is string i) Info = i;
     }
 
+    /// <summary>
+    /// Создать солид по BoxData.
+    /// Shape должно быть одно из Shapes.
+    /// Готовый солид не вставляется в чертеж (Owner не используется в этой процедуре)
+    /// </summary>
+    /// <returns>может вернуть null</returns>
     public Solid3d
     CreateSolid(Database db, Transaction tr)
     {
@@ -282,10 +280,19 @@ namespace AVC
       return solid;
     }
 
+    /// <summary>
+    /// Создать BlockReference по данным из BoxData.
+    /// Shape должно быть Block.
+    /// Name должно уазывать на имя существующего блока из чертежа db или из шаблона.
+    /// SizeX,SizeY,SizeZ используются как масштаб блока (обычно 1)
+    /// Kind и Info игнорируются.
+    /// BlockReference не вставляется в чертеж (Owner не используется в этой процедуре)
+    /// </summary>
+    /// <returns>может вернуть null</returns>
     public BlockReference
     CreateBlock(Database db, Transaction tr)
     {
-      if (IsZeroSize || db is null || tr is null || !IsBlock) return null;
+      if (!IsBlock || IsNullOrWhiteSpace(Name) || db is null || tr is null) return null;
       Point3d point = new (X, Y, Z);
       BlockManager bm = new (db, tr);
       BlockReference br = bm.CreateBlockReference(Name, point);
@@ -327,6 +334,14 @@ namespace AVC
       if (!materialId.IsNull) br.MaterialId = materialId;
 
       return br;
+    }
+
+    public static bool
+    IsModel(string blockName)
+    {
+      if (IsNullOrWhiteSpace(blockName)) return true;
+      string up = blockName.ToUpper();
+      return up == "MODEL" || up == "*MODEL_SPACE";
     }
 
     public override string

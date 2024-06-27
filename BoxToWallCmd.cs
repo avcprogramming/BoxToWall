@@ -335,11 +335,15 @@ namespace AVC
       catch (System.Exception ex) { Cns.Err(ex); }
     }
 
+    /// <summary>
+    /// Создать солиды и боксы по данным из boxes и трансформировать по transform. BoxData.Owner игнорируется.
+    /// Вызвать Drill.
+    /// Вставить их в группу или блок blockName.
+    /// </summary>
     internal static ObjectId
     CreateWall(BoxData[] boxes, string blockName, Matrix3d transform, CreateBoxEnum flags, Database db)
     {
-      string up = blockName.ToUpper();
-      bool toModel = up == "MODEL" || up == "*MODEL_SPACE";
+      bool toModel = BoxData.IsModel(blockName);
 
       // Создаем солиды-детали и ставим их вертикально
       List<ObjectId> boxIds = CreateBoxes(boxes, db, db.GetModelId(), transform);

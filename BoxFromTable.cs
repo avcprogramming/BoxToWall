@@ -94,14 +94,29 @@ namespace AVC
         List<ObjectId> btrs = new();
         int count = 0;
         using (LongOperationManager lom = new(BoxFromTableL.CreateBoxes, boxes.Count() + groups.Count))
+        {
+          List<BoxData> model = new(); // нельзя создавать блоки в модели до того как созданы все остальные блоки (которые возможно надо вставить в модель)
           foreach (KeyValuePair<string, List<BoxData>> group in groups)
           {
             lom.TickOrEsc();
-            ObjectId blockId = BoxToWallCmd.CreateWall(group.Value.ToArray(), group.Key, Matrix3d.Identity, style.Flags, db);
-            if (blockId.IsNull) continue;
-            if (blockId.ObjectClass == BlockExt.dbBTR) btrs.Add(blockId);
-            count++;
+            if (BoxData.IsModel(group.Key))
+              foreach (BoxData box in group.Value) model.Add(box);
+            else
+            {
+              ObjectId blockId = BoxToWallCmd.CreateWall(group.Value.ToArray(), group.Key, Matrix3d.Identity, style.Flags, db);
+              if (blockId.IsNull) continue;
+              if (blockId.ObjectClass == BlockExt.dbBTR) btrs.Add(blockId);
+              count++;
+            }
           }
+
+          if (model.Count > 0)
+          {
+            ObjectId blockId = BoxToWallCmd.CreateWall(model.ToArray(), "", Matrix3d.Identity, style.Flags, db);
+            if (!blockId.IsNull)
+              count++;
+          }
+        }
 
         // Выставка блоков
         if (style.Flags.HasFlag(CreateBoxEnum.Expose) && btrs.Count > 0) ExposeBlocks(btrs, db);
