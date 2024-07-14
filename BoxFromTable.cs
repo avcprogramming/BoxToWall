@@ -4,14 +4,10 @@ using System;
 using System.IO;
 using System.Collections.Generic;
 using System.Linq;
-using System.Net.Http;
-using System.Text;
-using System.Runtime.Serialization;
 using System.Windows.Forms;
 using static System.String;
 using static System.Math;
 using Ex = OfficeOpenXml;
-
 #if BRICS
 using Bricscad.ApplicationServices;
 using Teigha.DatabaseServices;
@@ -87,41 +83,22 @@ namespace AVC
         if (boxes is null) { Cns.NothingInfo(); return; }
 
         // Группировка по блокам/группам
-        Dictionary<string, List<BoxData>> groups = Grouping(boxes);
+        Dictionary<string, List<BoxData>> groups = BoxData.Grouping(boxes);
         if (groups.Count == 0) { Cns.NothingInfo(); return; }
 
         // Создание солидов и блоков
-        List<ObjectId> btrs = new();
-        int count = 0;
+        int count;
+        List<ObjectId> btrs;
         using (LongOperationManager lom = new(BoxFromTableL.CreateBoxes, boxes.Count() + groups.Count))
         {
-          List<BoxData> model = new(); // нельзя создавать блоки в модели до того как созданы все остальные блоки (которые возможно надо вставить в модель)
-          foreach (KeyValuePair<string, List<BoxData>> group in groups)
-          {
-            lom.TickOrEsc();
-            if (BoxData.IsModel(group.Key))
-              foreach (BoxData box in group.Value) model.Add(box);
-            else
-            {
-              ObjectId blockId = BoxToWallCmd.CreateWall(group.Value.ToArray(), group.Key, Matrix3d.Identity, style.Flags, db);
-              if (blockId.IsNull) continue;
-              if (blockId.ObjectClass == BlockExt.dbBTR) btrs.Add(blockId);
-              count++;
-            }
-          }
-
-          if (model.Count > 0)
-          {
-            ObjectId blockId = BoxToWallCmd.CreateWall(model.ToArray(), "", Matrix3d.Identity, style.Flags, db);
-            if (!blockId.IsNull)
-              count++;
-          }
+          count = BoxData.CreateWalls(groups, style.Flags, Matrix3d.Identity, db, out btrs);
         }
 
         // Выставка блоков
-        if (style.Flags.HasFlag(CreateBoxEnum.Expose) && btrs.Count > 0) ExposeBlocks(btrs, db);
+        if (style.Flags.HasFlag(CreateBoxEnum.Expose) && btrs.Count > 0) 
+          ExposeBlocks(btrs, db);
 
-        doc.ClearSelection(); // Очистка выделения 
+        doc.PermitClearSelection(); // Очистка выделения 
         if (count > 0)
         {
 #if !BRICS
@@ -136,17 +113,8 @@ namespace AVC
       }
       catch (CancelException ex) { Cns.CancelInfo(ex.Message); }
       catch (WarningException ex) { Cns.Warning(ex.Message); }
+      catch (System.IO.IOException ex) { Cns.Warning(ex.Message); }
       catch (System.Exception ex) { Cns.Err(ex); }
-    }
-
-    private static Dictionary<string, List<BoxData>>
-    Grouping(IEnumerable<BoxData> boxes)
-    {
-      Dictionary<string, List<BoxData>> res = new();
-      foreach (BoxData item in boxes)
-        if (res.TryGetValue(item.Owner, out List<BoxData> list)) list.Add(item);
-        else res.Add(item.Owner, new List<BoxData> { item });
-      return res;
     }
 
     private static Ofd
@@ -213,16 +181,12 @@ namespace AVC
         if (columns is null) continue;
         if (columns.Count == 0 || columns[0] is null || columns[0].ToString() == "") break; // обрываем на первой пустой строке
         BoxData box = new(columns.ToArray());
-        if (!(box.AllowedShape || box.IsBlock))
+        if (!box.AllowedShape)
         {
           if (boxes.Count > 0) Cns.Info(BoxFromTableL.SkipsLine, box.Shape);
           continue;
         }
-        if (box.AllowedShape && box.IsZeroSize)
-          Cns.Info(BoxFromTableL.ZeroSizeSolidError);
-        if (box.IsNull)
-          Cns.Info(BoxFromTableL.BoxIsNull);
-        else boxes.Add(box);
+        if (!box.IsNullMessage()) boxes.Add(box);
       }
 
       Cns.Info(BoxFromTableL.TableRowCount, rowCount - 1, boxes.Count);
@@ -250,16 +214,12 @@ namespace AVC
         for (int i = 0; i < columns.Length; i++)
           columns[i] = columns[i].Replace(Protector, createBoxStyle.Separator); // возврат запятых внутри колонок
         BoxData box = new(columns);
-        if (!(box.AllowedShape || box.IsBlock))
+        if (!box.AllowedShape)
         {
           if (boxes.Count > 0) Cns.Info(BoxFromTableL.SkipsLine, box.Shape);
           continue;
         }
-        if (box.AllowedShape && box.IsZeroSize)
-          Cns.Info(BoxFromTableL.ZeroSizeSolidError);
-        if (box.IsNull)
-          Cns.Info(BoxFromTableL.BoxIsNull);
-        else boxes.Add(box);
+        if (!box.IsNullMessage()) boxes.Add(box);
       }
 
       Cns.Info(BoxFromTableL.TableRowCount, lines.Length, boxes.Count);
@@ -276,38 +236,48 @@ namespace AVC
 #endif
 
       ExposeStyle exposeStyle = ExposeStyle.GetCurrent();
-      int multiplier = DataTableStyle.MultiplyRequest(exposeStyle.DTFlags); // получить множитель
-      Expose expose = new(exposeStyle, multiplier, db);
-      PointOfView pv = PointOfView.WCS;
-      db.UpdateExt(false);
-      Extents3d ext = db.DrawingSize(db.Inch() ? 80 : 2000);
-      double gap = exposeStyle.ActualFrameSpace * 2.0;
-      if (gap < STol.EqPoint) gap = ext.SizeX() * 0.1;
-      Point3d insert = new(ext.MaxPoint.X + gap, ext.MinPoint.Y - gap, 0);
-
-      List<ObjectId> blockRefIds = new();
-      using LongOperationManager lom = new(CommandL.Expose, btrs.Count);
-      using (Transaction tr = db.TransactionManager.StartTransaction())
+      EntFilterEnum oldFilter = exposeStyle.Filter.Flags;
+      try
       {
-        BlockManager bm = new(db, tr);
-        foreach (ObjectId blockId in btrs)
+        // отключаем все фильтрации, чтоб нечаянно не отфильтровать сборки
+        exposeStyle.Filter.Flags = EntFilterEnum.BlockScaled; // не считаем количество блоков в модели - количество всегда 1.
+        int multiplier = DataTableStyle.MultiplyRequest(exposeStyle.DTFlags); // получить множитель
+        Expose expose = new(exposeStyle, multiplier, db);
+        PointOfView pv = PointOfView.WCS;
+
+        db.UpdateExt(false);
+        Extents3d ext = db.DrawingSize(db.Inch() ? 80 : 2000);
+        double gap = exposeStyle.ActualFrameSpace * 2.0;
+        if (gap < STol.EqPoint) gap = ext.SizeX() * 0.1;
+        Point3d insert = new(ext.MaxPoint.X + gap, ext.MinPoint.Y - gap, 0);
+
+        List<ObjectId> blockRefIds = new();
+        using LongOperationManager lom = new(CommandL.Expose, btrs.Count);
+        using (Transaction tr = db.TransactionManager.StartTransaction())
         {
-          lom.TickOrEsc();
-          BlockReference br = bm.CreateBlockReference(blockId, insert);
-          if (br != null)
+          BlockManager bm = new(db, tr, AvcSettings.TemplateFile);
+          foreach (ObjectId blockId in btrs)
           {
-            ObjectId brId = br.SaveEnt(db);
-            if (!brId.IsNull) blockRefIds.Add(brId);
+            lom.TickOrEsc();
+            BlockReference br = bm.CreateBlockReference(blockId, insert);
+            if (br != null)
+            {
+              br.Layer = "0"; // чтоб нечаянно не отфильтровать по текущему слою
+              ObjectId brId = br.SaveEnt(db);
+              if (!brId.IsNull) blockRefIds.Add(brId);
+            }
           }
+          tr.Commit();
         }
-        tr.Commit();
-      }
 
-      if (blockRefIds.Count > 0)
-      {
-        expose.ExposeAssemblies(blockRefIds.ToSelectedObjects(), insert, pv);
-        blockRefIds.EraseAll();
+        if (blockRefIds.Count > 0)
+        {
+          expose.ExposeAssemblies(blockRefIds.ToSelectedObjects(), insert, pv);
+          blockRefIds.EraseAll();
+        }
+
       }
+      finally { exposeStyle.Filter.Flags = oldFilter; }
     }
 
 

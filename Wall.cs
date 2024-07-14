@@ -22,7 +22,8 @@ namespace AVC
   /// <summary>
   /// назначение обращения к веб-серверу, имя вызвавшей команды. 
   /// </summary>
-  internal enum WallTarget
+  internal enum 
+  WallTarget
   {
     WallToBox, 
     WallToVector
@@ -129,6 +130,14 @@ namespace AVC
     BackMat { get; set; }
 
     /// <summary>
+    /// Слой исходного бокса
+    /// </summary>
+    [DataMember]
+    public string
+    Layer
+    { get; set; }
+
+    /// <summary>
     /// Имя исходного солида-бокса (или блока в BoxToVector). 
     /// Если не пустое, то желательно его передать без изменений в PlanData.Name или в BoxData.Owner у всех деталей стены
     /// </summary>
@@ -186,6 +195,7 @@ namespace AVC
       BackMat = "";
       Count = count;
       Name = DatabaseExt.ValidName(ent.Name);
+      Layer = ent.Layer?.Name;
 
       if (ent is AvcSolid solid)
       {

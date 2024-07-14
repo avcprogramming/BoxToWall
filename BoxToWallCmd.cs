@@ -85,7 +85,7 @@ namespace AVC
         List<AvcDTObj> rawdata = dt.ExtractRawData(objectIds.ToSelectedObjects());
         if (rawdata is null || rawdata.Count == 0)
         {
-          Cns.Warning(Cns.Local(CnsL.NothingSucceeded));
+          Cns.Warning(CmdLineL.NoSelected);
           return;
         }
         if (!dt.CreateTable(rawdata)) return;
@@ -94,7 +94,7 @@ namespace AVC
 
         // Перебираем все одинаковые боксы
         int count = 0;
-        using (LongOperationManager lom = new(BoxFromTableL.BoxToWallProgress, dt.TotalRowCount * 2))
+        using (LongOperationManager lom = new(BoxFromTableL.BoxToWallProgress, dt.Groups.Count * 2 + dt.TotalRowCount))
           foreach (DTGroup group in dt.Groups)
             foreach (AvcDTPart part in group.Data)
             {
@@ -119,46 +119,52 @@ namespace AVC
               foreach (BoxData box in boxes)
                 if (IsNullOrWhiteSpace(box.Shape)) box.Shape = "Box";
 
-              ObjectId btrId = CreateWall(boxes, wall.Name, wall.StandUp, createBoxStyle.Flags, db);
-              if (btrId.IsNull) continue;
+              // Группировка по блокам/группам
+              Dictionary<string, List<BoxData>> groups = BoxData.Grouping(boxes);
+              if (groups.Count == 0) { Cns.NothingInfo(); return; }
 
-              if (createBoxStyle.Flags.HasFlag(CreateBoxEnum.MakeBlock) && btrId.ObjectClass == BlockExt.dbBTR)
+              count += BoxData.CreateWalls(groups, createBoxStyle.Flags, wall.StandUp, db, out List< ObjectId> btrIds);
+              if (btrIds is null || btrIds.Count == 0) continue;
+
+              using Transaction tr = db.TransactionManager.StartTransaction();
+              foreach (ObjectId btrId in btrIds)
               {
-                // Заполнение атрибутов
-                using Transaction tr = db.TransactionManager.StartTransaction();
-                Dictionary<string, string> att = new();
-                if (!IsNullOrWhiteSpace(wall.Kind))
-                  att.Add("Kind", wall.Kind);
-                if (!IsNullOrWhiteSpace(wall.FrameMat))
-                  att.Add("FrameMat", wall.FrameMat);
-                if (!IsNullOrWhiteSpace(wall.FrontMat))
-                  att.Add("FrontMat", wall.FrontMat);
-                if (!IsNullOrWhiteSpace(wall.BackMat))
-                  att.Add("BackMat", wall.BackMat);
-                if (wall.Frame > 0)
-                  att.Add("Frame", wall.Frame.ToFStr());
-                if (wall.Front > 0)
-                  att.Add("Front", wall.Front.ToFStr());
-                if (wall.Back > 0)
-                  att.Add("Back", wall.Back.ToFStr());
-                if (att.Count > 0)
+                if (createBoxStyle.Flags.HasFlag(CreateBoxEnum.MakeBlock) && btrId.ObjectClass == BlockExt.dbBTR)
                 {
-                  AvcBlock block = AvcManager.Read(btrId, tr) as AvcBlock;
-                  if (block is not null)
+                  // Заполнение атрибутов
+                  Dictionary<string, string> att = new();
+                  if (!IsNullOrWhiteSpace(wall.Kind))
+                    att.Add("Kind", wall.Kind);
+                  if (!IsNullOrWhiteSpace(wall.FrameMat))
+                    att.Add("FrameMat", wall.FrameMat);
+                  if (!IsNullOrWhiteSpace(wall.FrontMat))
+                    att.Add("FrontMat", wall.FrontMat);
+                  if (!IsNullOrWhiteSpace(wall.BackMat))
+                    att.Add("BackMat", wall.BackMat);
+                  if (wall.Frame > 0)
+                    att.Add("Frame", wall.Frame.ToFStr());
+                  if (wall.Front > 0)
+                    att.Add("Front", wall.Front.ToFStr());
+                  if (wall.Back > 0)
+                    att.Add("Back", wall.Back.ToFStr());
+                  if (att.Count > 0)
                   {
-                    block.AddConstAttributes(att, PointOfView.WCS);
-                    block.Save(tr);
+                    AvcBlock block = AvcManager.Read(btrId, tr) as AvcBlock;
+                    if (block is not null)
+                    {
+                      block.AddConstAttributes(att, PointOfView.WCS);
+                      block.Save(tr);
+                    }
                   }
-                }
 
-                // вставляем блок вместо всех боксов
-                InsertBlocks(part.Objects, btrId, wall, tr);
+                  // вставляем блок вместо всех боксов
+                  InsertBlocks(part.Objects, btrId, wall, tr);
+                }
                 tr.Commit();
               }
-              count++;
             }
 
-        doc.ClearSelection(); // Очистка выделения 
+        ed.ClearSelection(); // Принудительная очистка выделения 
         if (count > 0)
         {
 #if !BRICS
@@ -201,6 +207,7 @@ namespace AVC
         if (!LicenseCheck.HasLicenseFor(DbCommand.BoxToVectorCmdName))
           throw new CancelException("");
 #endif
+
         // Запрос списка солидов-боксов или блоков
         ObjectId[] objectIds = CnsAcad.Select(BoxFromTableL.SelectSolidOrBlock);
         if (objectIds is null) return;
@@ -208,10 +215,10 @@ namespace AVC
         // Группируем одинаковые боксы в таблицу деталей
         DataTable dt = new(GetColumns(), DTStyleEnum.Default, AvcSettings.LenStyle, SolidOrBlockFilter()
           , null, ReadEnum.ForceMeter, 1, db, PointOfView.WCS);
-        List<AvcDTObj> rawdata = dt.ExtractRawData(objectIds.ToSelectedObjects());
+        List<AvcDTObj> rawdata = dt.FindViewportsAndExtractRawData(objectIds.ToSelectedObjects());
         if (rawdata is null || rawdata.Count == 0)
         {
-          Cns.Warning(Cns.Local(CnsL.NothingSucceeded));
+          Cns.Warning(CmdLineL.NoSelected);
           return;
         }
         if (!dt.CreateTable(rawdata)) return;
@@ -223,12 +230,27 @@ namespace AVC
           | BlockCreateEnum.LabelOnTop | BlockCreateEnum.LableOnFront);
         BoxFromTableStyle createBoxStyle = BoxFromTableStyle.GetCurrent();
 
-        // временная система вставки чертежей в модель
-        Point3d insert = db.Extmin;
-        if (insert.X == 1e-20) insert = new Point3d(0, -4000, 0);
-        double gap = 4000;
-        insert += new Vector3d(0, -gap, 0);
-        Vector3d step = new(gap, 0, 0);
+        ObjectId spaceId;
+        Point3d insert;
+        Vector3d step;
+        Matrix3d scale;
+        if (SysVar.PaperSpace)
+        {
+          insert = new Point3d(0, 0, 0);
+          step = new(SysVar.Inch ? 4 : 100, 0,0);
+          spaceId = SymbolUtilityServices.GetBlockPaperSpaceId(db);
+          scale = Matrix3d.Scaling(0.04, new Point3d(0, 0, 0));
+        }
+        else // вставки чертежей в модель
+        {
+          insert = db.Extmin;
+          if (insert.X == 1e-20) insert = new Point3d(0, -4000, 0);
+          double gap = 4000;
+          insert += new Vector3d(0, -gap, 0);
+          step = new(gap, 0, 0);
+          spaceId = db.GetModelId();
+          scale = Matrix3d.Identity;
+        }
 
         // Перебираем все одинаковые боксы
         int count = 0;
@@ -278,7 +300,7 @@ namespace AVC
               lom.TickOrEsc();
 
               // Создаем чертежи
-              List<ObjectId> ids = CreatePlan2d(plan2d, db, db.GetModelId());
+              List<ObjectId> ids = CreatePlan2d(plan2d, db, spaceId);
               if (ids is null || ids.Count == 0)
               { Cns.Info(BoxFromTableL.ZeroPlanError, plan2d.Name); continue; }
 
@@ -299,7 +321,7 @@ namespace AVC
               ids.EraseAll(tr);
 
               // вставка чертежа
-              BlockExt.Insert(ret.BtrId, db.GetModelId(), insert, Matrix3d.Identity, tr);
+              BlockExt.Insert(ret.BtrId, spaceId, insert, scale, tr);
               insert += step;
 
               // удаляем боксы
@@ -317,7 +339,7 @@ namespace AVC
               count++;
             }
 
-        doc.ClearSelection(); // Очистка выделения 
+        doc.PermitClearSelection(); // Очистка выделения 
         if (count > 0)
         {
 #if !BRICS
@@ -333,115 +355,6 @@ namespace AVC
       catch (CancelException ex) { Cns.CancelInfo(ex.Message); }
       catch (WarningException ex) { Cns.Warning(ex.Message); }
       catch (System.Exception ex) { Cns.Err(ex); }
-    }
-
-    /// <summary>
-    /// Создать солиды и боксы по данным из boxes и трансформировать по transform. BoxData.Owner игнорируется.
-    /// Вызвать Drill.
-    /// Вставить их в группу или блок blockName.
-    /// </summary>
-    internal static ObjectId
-    CreateWall(BoxData[] boxes, string blockName, Matrix3d transform, CreateBoxEnum flags, Database db)
-    {
-      bool toModel = BoxData.IsModel(blockName);
-
-      // Создаем солиды-детали и ставим их вертикально
-      List<ObjectId> boxIds = CreateBoxes(boxes, db, db.GetModelId(), transform);
-      if (boxIds is null || boxIds.Count == 0)
-      { 
-        if (!toModel) Cns.Info(BoxFromTableL.ZeroSolidListError, blockName); 
-        return ObjectId.Null; 
-      }
-      ObjectId[] boxIdsArray = boxIds.ToArray();
-
-      if (flags.HasFlag(CreateBoxEnum.Drill))
-      {
-        string hl = DrillOptions.HolesLayerName.ToUpper();
-        if (IsNullOrWhiteSpace(hl)) Cns.Info(DrillL.LayerNotSpecified);
-        else
-        {
-          // Поищем, есть ли среди боксов дырки для сверления
-          bool hasHoles = false;
-          foreach (BoxData boxData in boxes) 
-            if (hl.Equals(boxData.Layer, StringComparison.OrdinalIgnoreCase) || boxData.IsBlock)
-            { hasHoles = true; break; }
-          if (hasHoles)
-          {
-#if RENT || VARS
-            DocExt.ThirdTest = db.BlockTableId; // проверка в Subtraction
-            if (!LicenseCheck.HasLicenseFor(DbCommand.DrillCmdName))
-              throw new CancelException("");
-#endif
-
-            try
-            {
-              Cns.Info(DrillL.Drilling);
-              int count = Drill.MakeDrill(boxIdsArray, hl, db);
-              if (count > 0)
-              {
-                // Удалим ID дырок
-                boxIds = new();
-                foreach (ObjectId oldId in boxIdsArray)
-                  if (!oldId.IsNull && !oldId.IsErased) boxIds.Add(oldId);
-                boxIdsArray = boxIds.ToArray();
-              }
-            }
-            catch(WarningException ex) { Cns.Info(ex.Message); }
-          }
-        }
-      }
-
-      ObjectId retId = boxIds[0];
-      if (!toModel && (flags.HasFlag(CreateBoxEnum.MakeBlock) || flags.HasFlag(CreateBoxEnum.MakeGroup)))
-      {
-        AssemblyStyle style = AssemblyStyle.GetCurrent();
-        using Transaction tr = db.TransactionManager.StartTransaction();
-        string newName = IsNullOrWhiteSpace(blockName) ?
-          style.NewName(boxIdsArray, db, tr) : DatabaseExt.ValidName(blockName);
-        if (flags.HasFlag(CreateBoxEnum.MakeBlock)) // создание блока
-        {
-          // Подправим стиль создания блоков
-          BlockCreateEnum createOpt = style.CreateOptions &
-            ~(BlockCreateEnum.LayerZero | BlockCreateEnum.MeshToSolid | BlockCreateEnum.Unite | BlockCreateEnum.Insert)
-            | BlockCreateEnum.BlockMetric;
-
-          // создание блока в начале координат без вставки
-          CreateBlockResult ret = BlockCreate.CreateNewBlock(
-            boxIdsArray, newName, createOpt, BlockBasePointEnum.WCS, BlockRotationEnum.WCS, Point3dExt.Null,
-            Matrix3d.Identity, style.LabelHeight, tr);
-          if (ret.IsNull) return ObjectId.Null;
-          boxIds.EraseAll(tr);
-          retId = ret.BtrId;
-        }
-        else if (flags.HasFlag(CreateBoxEnum.MakeGroup)) // создание группы
-        {
-          Cns.Info(BoxFromTableL.CreateGroup, newName);
-          Group group;
-          DBDictionary dic = tr.GetObject(db.GroupDictionaryId, OpenMode.ForWrite) as DBDictionary;
-          if (dic is null) return ObjectId.Null;
-          if (dic.Contains(newName)) // старая группа - заменяем все объекты
-          {
-            retId = dic.GetAt(newName);
-            group = tr.GetObject(retId, OpenMode.ForWrite) as Group;
-            if (group is null) return ObjectId.Null;
-            ObjectId[] oldIds = group.GetAllEntityIds();
-            foreach (ObjectId oldId in oldIds)
-              group.Remove(oldId);
-          }
-          else // новая группа
-          {
-            group = new(AvcWeb.AvcADLink, true);
-            retId = dic.SetAt(newName, group);
-            tr.AddNewlyCreatedDBObject(group, true);
-          }
-
-          foreach (ObjectId entId in boxIds)
-            group.Append(entId);
-        }
-        tr.Commit();
-      }
-
-      return retId;
     }
 
     private static List<DTColumn>
@@ -475,37 +388,6 @@ namespace AVC
       return respStr;
     }
 
-    /// <summary>
-    /// Создаем солиды-детали и ставим их вертикально
-    /// </summary>
-    private static List<ObjectId>
-    CreateBoxes(BoxData[] boxes, Database db, ObjectId spaceId, Matrix3d transform)
-    {
-      List<ObjectId> boxIds = new(boxes.Length);
-      using Transaction tr = db.TransactionManager.StartTransaction();
-      BlockTableRecord space = tr.GetObject(spaceId, OpenMode.ForWrite) as BlockTableRecord;
-      for (int i = 0; i < boxes.Length; i++)
-      {
-        LongOperationManager.TryTickOrEsc();
-        if (boxes[i].IsZeroSize)
-        {
-          Cns.Info(BoxFromTableL.ZeroSizeSolidError);
-          continue;
-        }
-
-        using Entity entity = boxes[i].IsBlock ? boxes[i].CreateBlock(db,tr) : boxes[i].CreateSolid(db, tr);
-        if (entity is null) continue;
-        entity.TransformBy(transform);
-        //Transient.DebugDraw(entity, 2);
-        ObjectId boxId = space.AppendEntity(entity);
-        if (boxId.IsNull) continue;
-        boxIds.Add(boxId);
-        tr.AddNewlyCreatedDBObject(entity, true);
-      }
-      tr.Commit();
-      return boxIds;
-    }
-
     private static List<ObjectId>
     CreatePlan2d(PlanData plan2d, Database db, ObjectId spaceId)
     {
@@ -528,6 +410,7 @@ namespace AVC
     {
       foreach (AvcObj obj in solids)
       {
+        LongOperationManager.TryTickOrEsc();
         AvcSolid nextBox = obj as AvcSolid;
         if (nextBox is null) continue;
         Matrix3d nextTrans = nextBox.Metric.Lay.Inverse() * wall.LayDown;
