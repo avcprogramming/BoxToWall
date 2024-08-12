@@ -33,7 +33,9 @@ using Ofd = Autodesk.AutoCAD.Windows.OpenFileDialog;
 #endif
 namespace AVC
 {
-
+  /// <summary>
+  /// Создать солиды-боксы и расставить блоки по данным из таблицы Excel
+  /// </summary>
   public static class
   BoxFromTableCmd
   {

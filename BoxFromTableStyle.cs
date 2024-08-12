@@ -30,14 +30,14 @@ namespace AVC
   internal enum
   CreateBoxEnum
   {
-    MakeBlock = 1 << 1,
-    MakeGroup = 1 << 2,
-    RequestFile = 1 << 3,
-    Drill = 1 << 4,
-    Expose = 1 << 5,
+    MakeBlock = 1 << 0,
+    MakeGroup = 1 << 1,
+    RequestFile = 1 << 2,
+    Drill = 1 << 3,
+    Expose = 1 << 4,
 
-    NotLoaded = 1 << 10,
-    Default = MakeBlock | RequestFile | Drill | Expose
+    Default = MakeBlock | RequestFile | Drill | Expose,
+    NotLoaded = 1 << 31
   }
 
   internal class 

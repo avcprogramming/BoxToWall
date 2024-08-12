@@ -40,22 +40,28 @@ namespace AVC
     /// Если такой блок уже был в чертеже, то он будет заменен.
     /// </summary>
     [DataMember]
-    public string Name { get; set; }
+    public string 
+    Name { get; set; }
 
     [DataMember]
-    public PLineData[] PLines { get; set; }
+    public PLineData[] 
+    PLines { get; set; }
 
     [DataMember]
-    public TextData[] Texts { get; set; }
+    public TextData[] 
+    Texts { get; set; }
 
     [DataMember]
-    public DimensionData[] Dimensions { get; set; }
+    public DimensionData[] 
+    Dimensions { get; set; }
 
-    internal bool IsNull => (PLines is null || PLines.Length == 0) &&
+    internal bool 
+    IsNull => (PLines is null || PLines.Length == 0) &&
       (Texts is null || Texts.Length == 0) &&
       (Dimensions is null || Dimensions.Length == 0);
 
-    public PlanData() { }
+    public 
+    PlanData() { }
 
     public List<Entity>
     CreateEntities(Database db, Transaction tr)

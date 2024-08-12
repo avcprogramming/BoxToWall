@@ -84,10 +84,20 @@ namespace AVC
     /// <summary>
     /// Масштаб размеров для вывода правильных цифр (если задан текст, то нет смысла указывать масштаб).
     /// 0 - это 1:1
+    /// Назначается в свойство размера Dimlfac как Dimlfac(из стиля размера) делить на Scale
     /// </summary>
     [DataMember]
     public double 
     Scale { get; set; }
+
+    /// <summary>
+    /// Масштаб внешнего вида размера: отступов, стрелок
+    /// 0 - это 1:1
+    /// </summary>
+    [DataMember]
+    public double
+    DimScale
+    { get; set; }
 
     /// <summary>
     /// Текст размера. Если пустой - будет обмеренное число. Может содержать <> в позиции куда надо вставить размер.
@@ -153,8 +163,9 @@ namespace AVC
         DimLinePoint = new Point3d(DimLineX, DimLineY, 0)
       };
       dim.SetDatabaseDefaults(db);
-      dm.SetDimStyle(dim, Style);
+      dm.SetDimStyle(dim, Style); 
       if (Scale > 0.0) dim.Dimlfac /= Scale; // в стиле может быть свой масштаб
+      if (DimScale > 0.0) dim.Dimscale = DimScale;
       if (!IsNullOrWhiteSpace(Text)) dim.DimensionText = Text;
       if (Height > STol.EqPoint) dim.Dimtxt = Height;
       dim.LayerId = IsNullOrWhiteSpace(Layer) ? lm.GetOrCreate(LayerEnum.Annotation) : lm.GetOrCreate(Layer, LayerEnum.Annotation);

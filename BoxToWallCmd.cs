@@ -3,23 +3,16 @@
 // Ignore Spelling: Json Deserialize
 
 using System;
-using System.Reflection;
 using System.Collections.Generic;
 using System.Net.Http;
 using System.Text;
-using System.Runtime.Serialization;
 using static System.String;
 using static System.Math;
 using System.Diagnostics;
-using System.Windows;
-using System.Xml.Linq;
-
-
-
 #if BRICS
 using Bricscad.ApplicationServices;
 using Teigha.DatabaseServices;
-using Teigha.Colors;
+using Bricscad.Internal;
 using Bricscad.EditorInput;
 using Teigha.Geometry;
 using CadApp = Bricscad.ApplicationServices.Application;
@@ -27,7 +20,7 @@ using Rt = Teigha.Runtime;
 #else
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
-using Autodesk.AutoCAD.Colors;
+using Autodesk.AutoCAD.Internal;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Geometry;
 using Rt = Autodesk.AutoCAD.Runtime;
@@ -81,7 +74,7 @@ namespace AVC
 
         // Группируем одинаковые боксы в таблицу деталей
         DataTable dt = new(GetColumns(), DTStyleEnum.Default, AvcSettings.LenStyle,
-          EntityFilterStyle.SolidTableFilter(null), null, ReadEnum.ForceMeter, 1, db, PointOfView.WCS);
+          EntityFilterStyle.SolidTableFilter(null), null, ReadEnum.ForceMeter, 1, PointOfView.WCS);
         List<AvcDTObj> rawdata = dt.ExtractRawData(objectIds.ToSelectedObjects());
         if (rawdata is null || rawdata.Count == 0)
         {
@@ -170,8 +163,11 @@ namespace AVC
 #if !BRICS
           doc.Database.EvaluateFields(); // метод отсутствует в BricsCAD
 #endif
+          doc.TransactionManager.QueueForGraphicsFlush();
+          doc.TransactionManager.FlushGraphics();
           ed.Regen();
           ed.UpdateScreen();
+          Utils.FlushGraphics();
           Cns.Info(BoxFromTableL.BoxToWallResult, count);
           //doc.SendStringToExecute("_REGENALL ", true, false, false);
         }
@@ -214,7 +210,7 @@ namespace AVC
 
         // Группируем одинаковые боксы в таблицу деталей
         DataTable dt = new(GetColumns(), DTStyleEnum.Default, AvcSettings.LenStyle, SolidOrBlockFilter()
-          , null, ReadEnum.ForceMeter, 1, db, PointOfView.WCS);
+          , null, ReadEnum.ForceMeter, 1, PointOfView.WCS);
         List<AvcDTObj> rawdata = dt.FindViewportsAndExtractRawData(objectIds.ToSelectedObjects());
         if (rawdata is null || rawdata.Count == 0)
         {
@@ -268,25 +264,30 @@ namespace AVC
               try
               {
                 string json = Request(createBoxStyle.ServerAddress, wall);
+
                 //..тест
-                //    PlanData plan = new()
-                //    {
-                //      Name = avcEnt.Name,
-                //      PLines = new PLineData[2]
-                //      {
-                //new ( new VertexData(0,0), new VertexData(0,wall.Thickness), new VertexData(wall.Width,wall.Thickness), new VertexData(wall.Width,0), true),
+                //PlanData plan = new()
+                //{
+                //  Name = avcEnt.Name,
+                //  PLines = new PLineData[2]
+                //  {
+                //new ( new VertexData(0,0),
+                //  new VertexData(0,wall.Thickness),
+                //  new VertexData(wall.Width,wall.Thickness),
+                //  new VertexData(wall.Width,0), true)
+                //{ LineType = "HIDDEN2" },
                 //new ( new VertexData(0,0), new VertexData(wall.Width,wall.Thickness))
-                //      },
-                //      Texts = new TextData[1]
-                //      {
+                //  },
+                //  Texts = new TextData[1]
+                //  {
                 //new (200,105, $"тут стена {avcEnt.Name} - {wall.Count}")
-                //      },
-                //      Dimensions = new DimensionData[2]
-                //      {
-                //new (0,0,wall.Width,0,0,-20,0) { Text ="Ширина=<>" },
+                //  },
+                //  Dimensions = new DimensionData[2]
+                //  {
+                //new (0,0,wall.Width,0,0,-20,0) { Text ="Ширина=<>", DimScale = 5 },
                 //new (0,0,0,wall.Thickness,-20,0,90)
-                //      }
-                //    };
+                //  }
+                //};
                 //string json = WebServices.SerializeToJson(plan);
                 //Debug.Print(json);
 
@@ -345,10 +346,12 @@ namespace AVC
 #if !BRICS
           doc.Database.EvaluateFields(); // метод отсутствует в BricsCAD
 #endif
+          doc.TransactionManager.QueueForGraphicsFlush();
+          doc.TransactionManager.FlushGraphics();
           ed.Regen();
           ed.UpdateScreen();
+          Utils.FlushGraphics();
           Cns.Info(BoxFromTableL.BoxToVectorResult, count);
-          doc.SendStringToExecute("_REGENALL ", true, false, false);
         }
         else Cns.NothingInfo();
       }

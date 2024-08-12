@@ -34,19 +34,24 @@ namespace AVC
     /// Замкнутая полилиния или окружность. Последний вертекс соединен с первым.
     /// </summary>
     [DataMember]
-    public bool Closed { get; set; }
+    public bool 
+    Closed { get; set; }
 
     [DataMember]
-    public string Color { get; set; }
+    public string 
+    Color { get; set; }
 
     [DataMember]
-    public string Layer { get; set; }
+    public string 
+    Layer { get; set; }
 
     [DataMember]
-    public string LineType { get; set; }
+    public string 
+    LineType { get; set; }
 
     [DataMember]
-    public double LineWeight { get; set; } = -3;
+    public double 
+    LineWeight { get; set; } = -3;
 
     /// <summary>
     /// Список вершин и кривизны сегментов.

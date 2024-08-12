@@ -6,13 +6,6 @@ using static System.String;
 using static System.Math;
 using System.Collections.Generic;
 using System;
-using OfficeOpenXml.FormulaParsing.Excel.Functions.Math;
-using System.Data;
-
-using System.Windows;
-using System.Net;
-
-
 #if BRICS
 using Bricscad.ApplicationServices;
 using Teigha.DatabaseServices;
@@ -148,6 +141,12 @@ namespace AVC
     public string Material { get; set; }
 
     /// <summary>
+    /// Направление текстуры материала
+    /// </summary>
+    [DataMember]
+    public string Texture { get; set; }
+
+    /// <summary>
     /// В какую сборку добавить этот солид (в блок или именованная группа в зависимости от настроек)
     /// По умолчанию Model
     /// </summary>
@@ -172,6 +171,7 @@ namespace AVC
     /// </summary>
     [DataMember]
     public string Info { get; set; }
+
 
     /// <summary>
     /// Owner = Model
@@ -226,13 +226,14 @@ namespace AVC
       Kind = solid.Kind;
       Info = solid.Info;
       Owner = solid.BlockName;
+      Texture = SolidTexture.GetTextureName(solid.Texture);
     }
 
     /// <summary>
     /// Количество столбцов таблицы для преобразования в BoxData
     /// </summary>
     internal const int
-    ColumnCount = 17;
+    ColumnCount = 18;
 
     internal
     BoxData(object[] columns)
@@ -258,13 +259,14 @@ namespace AVC
       else { Cns.Info(BoxFromTableL.ColumnReadError, 'I'); Shape = "Error"; return; }
       if (columns[9] is double rz || AvcSettings.LenStyle.ParseDistance(columns[9].ToString(), out rz)) RotateZ = rz;
       else { Cns.Info(BoxFromTableL.ColumnReadError, 'J'); Shape = "Error"; return; }
-      if (columns.Length > 10 && columns[10] is string l) Layer = l;
-      if (columns.Length > 11 && columns[11] is string c) Color = c;
-      if (columns.Length > 12 && columns[12] is string m) Material = m;
-      if (columns.Length > 13 && columns[13] is string g) Owner = g;
-      if (columns.Length > 14 && columns[14] is string n) Name = n;
-      if (columns.Length > 15 && columns[15] is string k) Kind = k;
-      if (columns.Length > 16 && columns[16] is string i) Info = i;
+      if (columns.Length > 10 && columns[10] is string g) Owner = g;
+      if (columns.Length > 11 && columns[11] is string l) Layer = l;
+      if (columns.Length > 12 && columns[12] is string c) Color = c;
+      if (columns.Length > 13 && columns[13] is string m) Material = m;
+      if (columns.Length > 14 && columns[14] is string t) Texture = t;
+      if (columns.Length > 15 && columns[15] is string n) Name = n;
+      if (columns.Length > 16 && columns[16] is string k) Kind = k;
+      if (columns.Length > 17 && columns[17] is string i) Info = i;
     }
 
     /// <summary>
@@ -317,6 +319,9 @@ namespace AVC
         solid.TransformBy(Matrix3d.Rotation(RotateZ / 180.0 * PI, Vector3d.ZAxis, new Point3d(X, Y, Z)));
 
       XDataNames xd = new(Name, SolidFlags.None, Kind, Info);
+      TextureAlong t = SolidTexture.GetTextureFromName(Texture);
+      if (t != TextureAlong.Indeterminate)
+        xd.Texture = t;
       xd.SaveTo(solid, tr);
 
       solid.SetDatabaseDefaults(db);
@@ -337,13 +342,14 @@ namespace AVC
         : MaterialExt.GetOrCreate(Material, ObjectId.Null, MatUseLike.Sheet, db, tr);
       solid.SetMaterialOrColor(materialId, color, tr);
 
+
       return solid;
     }
 
     public Curve
     CreateCurve(Database db, Transaction tr)
     {
-      if (IsNull) return null;
+      if (IsNull || db is null || tr is null) return null;
 
       if (Shape == "Rectangle" && (SizeX < STol.EqPoint || SizeY < STol.EqPoint))
         Shape = "Line";
@@ -373,6 +379,7 @@ namespace AVC
           pl.AddVertexAt(2, new Point2d(X + SizeX, Y + SizeY), 0, 0, 0);
           pl.AddVertexAt(3, new Point2d(X, Y + SizeY), 0, 0, 0);
           pl.Closed = true;
+          pl.TransformBy(Matrix3d.Displacement(Vector3d.ZAxis * Z));
           curve = pl;
           break;
         case "Circle":
