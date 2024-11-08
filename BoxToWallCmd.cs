@@ -275,7 +275,7 @@ namespace AVC
                 //  new VertexData(0,wall.Thickness),
                 //  new VertexData(wall.Width,wall.Thickness),
                 //  new VertexData(wall.Width,0), true)
-                //{ LineType = "HIDDEN2" },
+                //{ LineStyle = "HIDDEN2" },
                 //new ( new VertexData(0,0), new VertexData(wall.Width,wall.Thickness))
                 //  },
                 //  Texts = new TextData[1]
@@ -367,6 +367,8 @@ namespace AVC
       new DTColumn("", "%width%", DTColumnEnum.Desc, AvcSettings.LenStyle),
       new DTColumn("", "%thickness%", DTColumnEnum.Desc, AvcSettings.LenStyle),
       new DTColumn("", "%mat%", DTColumnEnum.Asc, AvcSettings.LenStyle),
+      new DTColumn("", "%kind%", DTColumnEnum.Asc, AvcSettings.LenStyle),
+      new DTColumn("", "%info%", DTColumnEnum.Asc, AvcSettings.LenStyle),
     };
 
     private static EntityFilterStyle

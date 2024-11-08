@@ -150,7 +150,7 @@ namespace AVC
     /// </summary>
     [DataMember]
     public string
-    Kind  { get; set; }
+    Kind { get; set; }
 
     /// <summary>
     /// Количество одинаковых солидов-боксов или блоков в исходных данных (не зависимо от ориентации).
@@ -274,7 +274,8 @@ namespace AVC
     }
 
     public override string
-    ToString() => $"{Name} {Height.ApproxSize()}x{Width.ApproxSize()}x{Thickness.ApproxSize()}";
+    ToString() => 
+    $"{Name} {Height.ApproxSize()}x{Width.ApproxSize()}x{Thickness.ApproxSize()}";
 
   }
 }

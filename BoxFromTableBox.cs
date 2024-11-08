@@ -36,11 +36,11 @@ namespace AVC
     {
       InitializeComponent();
       if (FormEditorMode) return;
-#if VARS || DEBUG
-      CommandNames = new string[] { DbCommand.BoxFromTableCmdName, DbCommand.BoxToWallCmdName, DbCommand.BoxToVectorCmdName };
-#else
-      CommandNames = new string[] { DbCommand.BoxFromTableCmdName};
-#endif
+      bool lic =  LicenseCheck.HasLicenseFor(DbCommand.BoxToWallCmdName);
+      pnServerAddress.Visible = lic;
+      if (lic)
+        CommandNames = new string[] { DbCommand.BoxFromTableCmdName, DbCommand.BoxToWallCmdName, DbCommand.BoxToVectorCmdName };
+      else CommandNames = new string[] { DbCommand.BoxFromTableCmdName };
     }
 
     public override bool
@@ -100,11 +100,6 @@ namespace AVC
         cbExpose.Checked = (style.Flags & CreateBoxEnum.Expose) != 0;
 
         pnFile.Visible = !cbRequestFile.Checked;
-#if VARS || DEBUG
-        pnServerAddress.Visible = true;
-#else
-        pnServerAddress.Visible = false;
-#endif
       }
       finally
       {

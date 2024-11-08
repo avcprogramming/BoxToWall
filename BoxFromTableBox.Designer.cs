@@ -66,9 +66,9 @@ namespace AVC
       this.pnSeparator.SuspendLayout();
       this.SuspendLayout();
       // 
-      // lbTitul
+      // lbTitle
       // 
-      this.lbTitul.Text = "Detail Drawings";
+      this.lbTitle.Text = "Detail Drawings";
       // 
       // pnName
       // 

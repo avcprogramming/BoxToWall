@@ -49,7 +49,8 @@ namespace AVC
     /// Для мультитекстов - "Text"
     /// </summary>
     [DataMember]
-    public string Shape { get; set; } = "Box";
+    public string 
+    Shape { get; set; } = "Box";
 
     /// <summary>
     /// Точка вставки солида внутрь сборки. 
@@ -141,14 +142,17 @@ namespace AVC
     public string Material { get; set; }
 
     /// <summary>
-    /// Направление текстуры материала
+    /// Направление текстуры материала.
+    /// Допустимы варианты: x,y,z,along,across,"". 
+    /// Названия along,across,"" - зависят от локализации и настраиваются в Общих настройках.
+    /// Любой другой текст - текстура будет назначена в зависимости от Grain материла.
     /// </summary>
     [DataMember]
     public string Texture { get; set; }
 
     /// <summary>
     /// В какую сборку добавить этот солид (в блок или именованная группа в зависимости от настроек)
-    /// По умолчанию Model
+    /// Пустое свойство или null - создать сборку по шаблону AsmCreate. Для записи в модель = Model
     /// </summary>
     [DataMember]
     public string Owner { get; set; }
@@ -171,7 +175,6 @@ namespace AVC
     /// </summary>
     [DataMember]
     public string Info { get; set; }
-
 
     /// <summary>
     /// Owner = Model
@@ -296,6 +299,7 @@ namespace AVC
             solid.CreateFrustum(SizeZ, SizeX * 0.5, SizeY * 0.5, SizeX * 0.5);
             solid.TransformBy(Matrix3d.Displacement(new Vector3d(X, Y, Z + SizeZ * 0.5)));
           }
+          solid.CleanBody(); // иначе остается стык на поверхности цилиндра
           break;
         case "Pyramid":
           solid.CreatePyramid(SizeZ, 4, SizeY, 0.0);
@@ -319,10 +323,16 @@ namespace AVC
         solid.TransformBy(Matrix3d.Rotation(RotateZ / 180.0 * PI, Vector3d.ZAxis, new Point3d(X, Y, Z)));
 
       XDataNames xd = new(Name, SolidFlags.None, Kind, Info);
-      TextureAlong t = SolidTexture.GetTextureFromName(Texture);
+      string lc = Texture?.ToLower();
+      TextureAlong t;
+      if (lc == "x" || lc == "y" || lc == "z")
+        t = LengthAxis() == lc ? TextureAlong.Along : TextureAlong.Across;
+      else
+        t = SolidTexture.GetTextureFromName(Texture);
       if (t != TextureAlong.Indeterminate)
         xd.Texture = t;
-      xd.SaveTo(solid, tr);
+      xd.SaveTo(solid, db, tr);
+      bool hasTexture = t == TextureAlong.Across || t == TextureAlong.Along;
 
       solid.SetDatabaseDefaults(db);
       if (!IsNullOrWhiteSpace(Layer))
@@ -339,11 +349,25 @@ namespace AVC
           Cns.Info(BoxFromTableL.ColorErr, Color);
 
       ObjectId materialId = IsNullOrWhiteSpace(Material) ? ObjectId.Null
-        : MaterialExt.GetOrCreate(Material, ObjectId.Null, MatUseLike.Sheet, db, tr);
+        : MaterialExt.GetOrCreate(Material, ObjectId.Null, 
+        AvcPaletteStyle.DefMaterialUseLike, hasTexture, db, tr);
       solid.SetMaterialOrColor(materialId, color, tr);
 
 
       return solid;
+    }
+
+    /// <summary>
+    /// По какой оси изначально (до разворотов) была самая длинная сторона бокса
+    /// </summary>
+    /// <returns></returns>
+    private string
+    LengthAxis()
+    {
+      double max = Max(Max(SizeX, SizeY), SizeZ);
+      if (max == SizeX) return "x";
+      if (max == SizeY) return "y";
+      return "z";
     }
 
     public Curve
@@ -413,16 +437,16 @@ namespace AVC
 
       if (!IsNullOrWhiteSpace(Material))
       {
-        ObjectId materialId = MaterialExt.GetOrCreate(Material, ObjectId.Null, MatUseLike.Sheet, db, tr);
+        ObjectId materialId = MaterialExt.GetOrCreate(Material, ObjectId.Null,
+          MatUseLike.Rod, false, db, tr);
         if (!materialId.IsNull) curve.MaterialId = materialId;
       }
 
       XDataNames xd = new(Name, SolidFlags.None, Kind, Info);
-      xd.SaveTo(curve, tr);
+      xd.SaveTo(curve, db, tr);
 
       return curve;
     }
-
 
     /// <summary>
     /// Создать BlockReference по данным из BoxData.
@@ -474,7 +498,8 @@ namespace AVC
         else Cns.Info(BoxFromTableL.ColorErr, Color);
 
       ObjectId materialId = IsNullOrWhiteSpace(Material) ? ObjectId.Null
-        : MaterialExt.GetOrCreate(Material, ObjectId.Null, MatUseLike.Sheet, db, tr);
+        : MaterialExt.GetOrCreate(Material, ObjectId.Null, 
+        AvcPaletteStyle.DefMaterialUseLike, false, db, tr);
       if (!materialId.IsNull) br.MaterialId = materialId;
 
       return br;
@@ -613,7 +638,7 @@ namespace AVC
 
       if (flags.HasFlag(CreateBoxEnum.Drill))
       {
-        string hl = DrillOptions.HolesLayerName.ToUpper();
+        string hl = DrillOptions.HolesLayerName;
         if (IsNullOrWhiteSpace(hl)) Cns.Info(DrillL.LayerNotSpecified);
         else
         {
