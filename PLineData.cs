@@ -23,7 +23,7 @@ using CadApp = Autodesk.AutoCAD.ApplicationServices.Application;
 namespace AVC
 {
   /// <summary>
-  /// Вспомогательный обьект для получения с web-сервера данных о полилиниях, десериализации из JSON 
+  /// Вспомогательный объект для получения с web-сервера данных о полилиниях, десериализации из JSON 
   /// </summary>
   [DataContract]
   [Obfuscation(Exclude = true, Feature = "renaming")]

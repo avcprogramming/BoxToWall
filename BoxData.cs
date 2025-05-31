@@ -1,11 +1,12 @@
 ﻿// A>V>C> avc.programming@gmail.com https://sites.google.com/site/avcplugins/
+// Ignore Spelling: sunion sint ddj tabslot dri msl crs omo fp ic cint cunion osl reducew azone
 
 using System.Reflection;
 using System.Runtime.Serialization;
 using static System.String;
 using static System.Math;
 using System.Collections.Generic;
-using System;
+using System.Linq;
 #if BRICS
 using Bricscad.ApplicationServices;
 using Teigha.DatabaseServices;
@@ -15,13 +16,9 @@ using Teigha.Geometry;
 using CadApp = Bricscad.ApplicationServices.Application;
 using Rt = Teigha.Runtime;
 #else
-using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.Colors;
-using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Geometry;
-using Rt = Autodesk.AutoCAD.Runtime;
-using CadApp = Autodesk.AutoCAD.ApplicationServices.Application;
 #endif
 
 namespace AVC
@@ -49,8 +46,9 @@ namespace AVC
     /// Для мультитекстов - "Text"
     /// </summary>
     [DataMember]
-    public string 
-    Shape { get; set; } = "Box";
+    public string
+    Shape
+    { get; set; } = "Box";
 
     /// <summary>
     /// Точка вставки солида внутрь сборки. 
@@ -106,7 +104,7 @@ namespace AVC
 
     /// <summary>
     /// Развороты детали вокруг трех осей. Центр вращения - в точке вставки. 
-    /// Повототы делаются снача вокруг X, потом Y, потом Z.
+    /// Повороты делаются сначала вокруг X, потом Y, потом Z.
     /// Для текстов поворот RotateZ применяется первым, как свойство текста Rotation
     /// В градусах.
     /// </summary>
@@ -177,6 +175,15 @@ namespace AVC
     public string Info { get; set; }
 
     /// <summary>
+    /// Список команд для пост-обработки этого объекта. Реализованы следующие команды: sint, sunion, ddj, tabslot, dri.
+    /// Команды перечисляются через запятую без пробелов. 
+    /// Выполняются для всех помеченных объектов в блоке одновременно.
+    /// Порядок перечисления команд не важен, будут выполнены как запрограммировано (порядок указан выше).
+    /// </summary>
+    [DataMember]
+    public string Commands { get; set; }
+
+    /// <summary>
     /// Owner = Model
     /// </summary>
     internal bool
@@ -236,7 +243,7 @@ namespace AVC
     /// Количество столбцов таблицы для преобразования в BoxData
     /// </summary>
     internal const int
-    ColumnCount = 18;
+    ColumnCount = 19;
 
     internal
     BoxData(object[] columns)
@@ -270,6 +277,7 @@ namespace AVC
       if (columns.Length > 15 && columns[15] is string n) Name = n;
       if (columns.Length > 16 && columns[16] is string k) Kind = k;
       if (columns.Length > 17 && columns[17] is string i) Info = i;
+      if (columns.Length > 18 && columns[18] is string cmd) Commands = cmd;
     }
 
     /// <summary>
@@ -288,7 +296,7 @@ namespace AVC
       {
         case "Cone":
           solid.CreateFrustum(SizeZ, SizeX * 0.5, SizeY * 0.5, 0.0);
-          solid.TransformBy(Matrix3d.Displacement(new Vector3d(X, Y, Z + SizeZ * 0.5)));
+          solid.Move(X, Y, Z + SizeZ * 0.5);
           break;
         case "Cylinder":
           if (Abs(SizeX - SizeY) < STol.EqPoint)
@@ -297,21 +305,21 @@ namespace AVC
           else
           {
             solid.CreateFrustum(SizeZ, SizeX * 0.5, SizeY * 0.5, SizeX * 0.5);
-            solid.TransformBy(Matrix3d.Displacement(new Vector3d(X, Y, Z + SizeZ * 0.5)));
+            solid.Move(X, Y, Z + SizeZ * 0.5);
           }
           solid.CleanBody(); // иначе остается стык на поверхности цилиндра
           break;
         case "Pyramid":
           solid.CreatePyramid(SizeZ, 4, SizeY, 0.0);
-          solid.TransformBy(Matrix3d.Displacement(new Vector3d(X, Y, Z + SizeZ * 0.5)));
+          solid.Move(X, Y, Z + SizeZ * 0.5);
           break;
         case "Sphere":
           solid.CreateSphere(SizeX);
-          solid.TransformBy(Matrix3d.Displacement(new Vector3d(X, Y, Z)));
+          solid.Move(X, Y, Z);
           break;
         default: // Box
           solid.CreateBox(SizeX, SizeY, SizeZ);
-          solid.TransformBy(Matrix3d.Displacement(new Vector3d(X + SizeX * 0.5, Y + SizeY * 0.5, Z + SizeZ * 0.5)));
+          solid.Move(X + SizeX * 0.5, Y + SizeY * 0.5, Z + SizeZ * 0.5);
           break;
       }
 
@@ -349,10 +357,9 @@ namespace AVC
           Cns.Info(BoxFromTableL.ColorErr, Color);
 
       ObjectId materialId = IsNullOrWhiteSpace(Material) ? ObjectId.Null
-        : MaterialExt.GetOrCreate(Material, ObjectId.Null, 
-        AvcPaletteStyle.DefMaterialUseLike, hasTexture, db, tr);
+        : MaterialExt.GetOrCreate(Material, ObjectId.Null,
+        AvcPaletteStyle.DefMaterialUseLike, hasTexture ? MaterialEnum.Grain : 0, db, tr);
       solid.SetMaterialOrColor(materialId, color, tr);
-
 
       return solid;
     }
@@ -389,7 +396,7 @@ namespace AVC
       switch (Shape)
       {
         case "Arc":
-          PSegment seg = new (new(X, Y), new(X + SizeX, Y + SizeY), SizeZ, ObjectId.Null);
+          PSegment seg = new(new(X, Y), new(X + SizeX, Y + SizeY), SizeZ, ObjectId.Null);
           curve = seg.ToCurve();
           curve.TransformBy(Matrix3d.Displacement(Vector3d.ZAxis * Z));
           break;
@@ -438,7 +445,7 @@ namespace AVC
       if (!IsNullOrWhiteSpace(Material))
       {
         ObjectId materialId = MaterialExt.GetOrCreate(Material, ObjectId.Null,
-          MatUseLike.Rod, false, db, tr);
+          MatUseLike.Rod, 0, db, tr);
         if (!materialId.IsNull) curve.MaterialId = materialId;
       }
 
@@ -451,7 +458,7 @@ namespace AVC
     /// <summary>
     /// Создать BlockReference по данным из BoxData.
     /// Shape должно быть Block.
-    /// Name должно уазывать на имя существующего блока из чертежа db или из шаблона.
+    /// Name должно указывать на имя существующего блока из чертежа _db или из шаблона.
     /// SizeX,SizeY,SizeZ используются как масштаб блока (обычно 1)
     /// Kind и Info игнорируются.
     /// BlockReference не вставляется в чертеж (Owner не используется в этой процедуре)
@@ -498,8 +505,8 @@ namespace AVC
         else Cns.Info(BoxFromTableL.ColorErr, Color);
 
       ObjectId materialId = IsNullOrWhiteSpace(Material) ? ObjectId.Null
-        : MaterialExt.GetOrCreate(Material, ObjectId.Null, 
-        AvcPaletteStyle.DefMaterialUseLike, false, db, tr);
+        : MaterialExt.GetOrCreate(Material, ObjectId.Null,
+        AvcPaletteStyle.DefMaterialUseLike, 0, db, tr);
       if (!materialId.IsNull) br.MaterialId = materialId;
 
       return br;
@@ -545,10 +552,13 @@ namespace AVC
     }
 
     public override string
-    ToString() => IsNull ? "Null" :
+    ToString()
+    {
+      return IsNull ? "Null" :
       IsBlock ? $"{Shape} {Name}" :
       IsText ? $"{Shape} {Info}" :
       $"{Shape} {SizeX.ApproxSize()}x{SizeY.ApproxSize()}x{SizeZ.ApproxSize()}";
+    }
 
     /// <summary>
     /// Группировка по BoxData.Owner
@@ -571,12 +581,13 @@ namespace AVC
     /// <summary>
     /// Создаем солиды-детали и ставим их вертикально
     /// </summary>
-    private static List<ObjectId>
+    private static CreateBoxResult
     CreateBoxes(BoxData[] boxes, Database db, ObjectId spaceId, Matrix3d transform)
     {
-      List<ObjectId> boxIds = new(boxes.Length);
       using Transaction tr = db.TransactionManager.StartTransaction();
       BlockTableRecord space = tr.GetObject(spaceId, OpenMode.ForWrite) as BlockTableRecord;
+      CreateBoxResult results = new();
+
       foreach (BoxData box in boxes)
       {
         LongOperationManager.TryTickOrEsc();
@@ -593,11 +604,12 @@ namespace AVC
         //Transient.DebugDraw(entity, 2);
         ObjectId boxId = space.AppendEntity(entity);
         if (boxId.IsNull) continue;
-        boxIds.Add(boxId);
+        results.Add(boxId, box.Commands);
         tr.AddNewlyCreatedDBObject(entity, true);
       }
+
       tr.Commit();
-      return boxIds;
+      return results;
     }
 
     public bool
@@ -618,7 +630,7 @@ namespace AVC
 
     /// <summary>
     /// Создать солиды и боксы по данным из boxes и трансформировать по transform. BoxData.Owner игнорируется.
-    /// Вызвать Drill.
+    /// Вызвать Drill и другие команды.
     /// Вставить их в группу или блок blockName.
     /// </summary>
     /// <returns>возвращает id BTR сборки или любой 1 ID </returns>
@@ -626,60 +638,32 @@ namespace AVC
     CreateWall(BoxData[] boxes, string blockName, Matrix3d transform, CreateBoxEnum flags, Database db)
     {
       bool toModel = IsModel(blockName);
+      ObjectId modelId = db.GetModelId();
 
       // Создаем солиды-детали и ставим их вертикально
-      List<ObjectId> boxIds = CreateBoxes(boxes, db, db.GetModelId(), transform);
-      if (boxIds is null || boxIds.Count == 0)
+      CreateBoxResult results = CreateBoxes(boxes, db, modelId, transform);
+      if (results is null || results.IsNull)
       {
         if (!toModel) Cns.Info(BoxFromTableL.ZeroSolidListError, blockName);
         return ObjectId.Null;
       }
-      ObjectId[] boxIdsArray = boxIds.ToArray();
 
-      if (flags.HasFlag(CreateBoxEnum.Drill))
+      // выполнение команд над готовыми боксами и, возможно, замена id на новые
+      RunCommands(ref results, boxes, flags, db, modelId);
+      if (results is null || results.IsNull)
       {
-        string hl = DrillOptions.HolesLayerName;
-        if (IsNullOrWhiteSpace(hl)) Cns.Info(DrillL.LayerNotSpecified);
-        else
-        {
-          // Поищем, есть ли среди боксов дырки для сверления
-          bool hasHoles = false;
-          foreach (BoxData boxData in boxes)
-            if (hl.Equals(boxData.Layer, StringComparison.OrdinalIgnoreCase) || boxData.IsBlock)
-            { hasHoles = true; break; }
-          if (hasHoles)
-          {
-#if RENT || VARS
-            DocExt.ThirdTest = db.BlockTableId; // проверка в Subtraction
-            if (!LicenseCheck.HasLicenseFor(DbCommand.DrillCmdName))
-              throw new CancelException("");
-#endif
-
-            try
-            {
-              Cns.Info(DrillL.Drilling);
-              int count = Drill.MakeDrill(boxIdsArray, hl, db);
-              if (count > 0)
-              {
-                // Удалим ID дырок
-                boxIds = new();
-                foreach (ObjectId oldId in boxIdsArray)
-                  if (!oldId.IsNull && !oldId.IsErased) boxIds.Add(oldId);
-                boxIdsArray = boxIds.ToArray();
-              }
-            }
-            catch (WarningException ex) { Cns.Info(ex.Message); }
-          }
-        }
+        if (!toModel) Cns.Info(BoxFromTableL.ZeroSolidListError, blockName);
+        return ObjectId.Null;
       }
 
-      ObjectId retId = boxIds[0]; // для возврата признака, что все сработало, но сборка не сделана
+      ObjectId[] boxIdArray = results.ToArray();
+      ObjectId retId = boxIdArray[0]; // для возврата признака, что все сработало, но сборка не сделана
       if (!toModel && (flags.HasFlag(CreateBoxEnum.MakeBlock) || flags.HasFlag(CreateBoxEnum.MakeGroup)))
       {
         AssemblyStyle style = AssemblyStyle.GetCurrent();
         using Transaction tr = db.TransactionManager.StartTransaction();
         string newName = IsNullOrWhiteSpace(blockName) ?
-          style.NewName(boxIdsArray, db, tr) : DatabaseExt.ValidName(blockName);
+          style.NewName(boxIdArray, db, tr) : DatabaseExt.ValidName(blockName);
         if (flags.HasFlag(CreateBoxEnum.MakeBlock)) // создание блока
         {
           // Подправим стиль создания блоков
@@ -689,10 +673,10 @@ namespace AVC
 
           // создание блока в начале координат без вставки
           CreateBlockResult ret = BlockCreate.CreateNewBlock(
-            boxIdsArray, newName, createOpt, BlockBasePointEnum.WCS, BlockRotationEnum.WCS, Point3dExt.Null,
+            boxIdArray, newName, createOpt, BlockBasePointEnum.WCS, BlockRotationEnum.WCS, Point3dExt.Null,
             Matrix3d.Identity, style.LabelHeight, tr);
           if (ret.IsNull) return ObjectId.Null;
-          boxIds.EraseAll(tr);
+          boxIdArray.EraseAll(tr);
           retId = ret.BtrId; // возврат BTR сборки для выставки сборок
         }
         else if (flags.HasFlag(CreateBoxEnum.MakeGroup)) // создание группы
@@ -717,13 +701,145 @@ namespace AVC
             tr.AddNewlyCreatedDBObject(group, true);
           }
 
-          foreach (ObjectId entId in boxIds)
+          foreach (ObjectId entId in boxIdArray)
             group.Append(entId);
         }
         tr.Commit();
       }
 
       return retId;
+    }
+
+    private static void
+    RunCommands(ref CreateBoxResult result, BoxData[] boxes, CreateBoxEnum flags, Database db, ObjectId spaceId)
+    {
+      if (result.IsNull) return;
+
+      foreach (var pair in result.Commands)
+        switch (pair.Key)
+        {
+          case "dri": break;
+          case "sint": break;
+          case "sunion": break;
+          case "ddj": break;
+          case "tabslot": break;
+          case "crs": Cns.Info(BoxFromTableL.NotImplementedCommand, pair.Key.ToUpper());  break;
+          case "fp": Cns.Info(BoxFromTableL.NotImplementedCommand, pair.Key.ToUpper());  break;
+          case "ic": Cns.Info(BoxFromTableL.NotImplementedCommand, pair.Key.ToUpper()); break;  // только для кривых
+          case "cunion": Cns.Info(BoxFromTableL.NotImplementedCommand, pair.Key.ToUpper()); break;
+          case "cint": Cns.Info(BoxFromTableL.NotImplementedCommand, pair.Key.ToUpper()); break;
+          case "msl": Cns.Info(BoxFromTableL.NotImplementedCommand, pair.Key.ToUpper()); break;
+          case "osl": Cns.Info(BoxFromTableL.NotImplementedCommand, pair.Key.ToUpper()); break;
+          case "reducew": Cns.Info(BoxFromTableL.NotImplementedCommand, pair.Key.ToUpper()); break;
+          case "azone": Cns.Info(BoxFromTableL.NotImplementedCommand, pair.Key.ToUpper()); break;
+          default: Cns.Info(BoxFromTableL.UnknownCommand, pair.Key.ToUpper()); break;
+        }
+
+      try
+      {
+        if (result.Commands.TryGetValue("sint", out HashSet<ObjectId> sint) && sint.Count > 0)
+        {
+#if RENT || VARS
+          if (!LicenseCheck.HasLicenseFor("SInt"))
+            throw new CancelException("");
+#endif
+          Cns.Info(CommandL.SolidInt);
+          SolidSubStyle subStyle = SolidSubStyle.GetCurrent();
+           HashSet<ObjectId> intResults = SolidIntCmd.Intersect(sint, db, new PointOfView(), false);
+          result.Replace(sint, intResults);
+        }
+
+        if (result.Commands.TryGetValue("sunion", out HashSet<ObjectId> sunion) && sunion.Count > 0)
+        {
+#if RENT || VARS
+          if (!LicenseCheck.HasLicenseFor("SUnion"))
+            throw new CancelException("");
+#endif
+          Cns.Info(CommandL.SolidUnion);
+          SolidSubStyle subStyle = SolidSubStyle.GetCurrent();
+          HashSet<ObjectId> unionResults = SolidUnionCmd.Union(sunion, db, new PointOfView(), false);
+          result.Replace(sunion, unionResults);
+        }
+
+        if (result.Commands.TryGetValue("ddj", out HashSet<ObjectId> ddj) && ddj.Count > 0)
+        {
+#if RENT || VARS
+          if (!LicenseCheck.HasLicenseFor("DDJ"))
+            throw new CancelException("");
+#endif
+          Cns.Info(CommandL.DDJ);
+          DadoJointStyle style = DadoJointStyle.GetCurrent();
+          DadoJoint.CreateJoints(ddj, style, db, false); // не меняет id солидов (но могут распадаться на части)
+          result.ClearErased();
+        }
+
+        if (result.Commands.TryGetValue("tabslot", out HashSet<ObjectId> tabslot) && tabslot.Count > 0)
+        {
+#if RENT || VARS
+          if (!LicenseCheck.HasLicenseFor("TabSlot"))
+            throw new CancelException("");
+#endif
+          Cns.Info(CommandL.TabSlot);
+          TabSlotCmd.CreateTabSlots(tabslot, db); // не меняет id солидов (но могут распадаться на части)
+          result.ClearErased();
+        }
+
+        // Сверловка
+        int count = 0;
+        if (result.Commands.TryGetValue("dri", out HashSet<ObjectId> dri) && dri.Count > 0)
+          count = DrillHoles(dri.ToArray(), null, db);
+        else if (flags.HasFlag(CreateBoxEnum.Drill))
+          count = DrillHoles(result.ToArray(), boxes, db);
+        // Удалим ID дырок
+        if (count > 0)
+          result.ClearErased();
+      }
+      catch (WarningException ex) { Cns.Warning(ex.Message); }
+    }
+
+    private static int
+    DrillHoles(ObjectId[] boxIdArray, BoxData[] boxes, Database db)
+    {
+      string hl = Drill.GetHolesLayer(boxIdArray, db);
+      if (IsNullOrEmpty(hl)) return 0;
+
+      HashSet<string> holeLayers;
+      using (Transaction tr = db.TransactionManager.StartTransaction())
+      {
+        LayerManager lm = new(db, tr);
+        holeLayers = lm.GetRealLayers(hl);
+        tr.Commit();
+      }
+
+      if (holeLayers.Count == 0)
+      {
+        Cns.Info(DrillL.LayerNotSpecified);
+        return 0;
+      }
+
+      // Поищем, есть ли среди боксов дырки для сверления
+      bool hasHoles = false;
+      if (boxes is null) hasHoles = true; // не проверяем
+      else
+        foreach (BoxData boxData in boxes)
+          if (holeLayers.Contains(boxData.Layer) || boxData.IsBlock)
+          { hasHoles = true; break; }
+      if (!hasHoles) return 0;
+
+#if RENT || VARS
+      DocExt.ThirdTest = db.BlockTableId; // проверка в Subtraction
+      if (!LicenseCheck.HasLicenseFor(DbCommand.DrillCmdName))
+        throw new CancelException("");
+#endif
+
+      try
+      {
+        Cns.Info(DrillL.Drilling);
+        return Drill.MakeDrill(boxIdArray, hl);
+      }
+      catch (WarningException ex) { Cns.Info(ex.Message); }
+
+      return 0;
     }
 
     /// <summary>

@@ -68,6 +68,9 @@ namespace AVC
       if (cbMakeGroup.Checked) style.Flags |= CreateBoxEnum.MakeGroup; else style.Flags &= ~CreateBoxEnum.MakeGroup;
       if (cbRequestFile.Checked) style.Flags |= CreateBoxEnum.RequestFile; else style.Flags &= ~CreateBoxEnum.RequestFile;
       if (cbExpose.Checked) style.Flags |= CreateBoxEnum.Expose; else style.Flags &= ~CreateBoxEnum.Expose;
+
+      style.BlockLayer = cbBlockLayer.Text;
+
       ShowData();
       return true;
     }
@@ -99,6 +102,9 @@ namespace AVC
         cbRequestFile.Checked = (style.Flags & CreateBoxEnum.RequestFile) != 0;
         cbExpose.Checked = (style.Flags & CreateBoxEnum.Expose) != 0;
 
+        cbBlockLayer.Text = style.BlockLayer;
+        pnBlockLayer.Visible = cbMakeBlock.Checked;
+
         pnFile.Visible = !cbRequestFile.Checked;
       }
       finally
@@ -124,6 +130,7 @@ namespace AVC
       SetTextTip(cbMakeGroup, BoxFromTableL.MakeGroup, BoxFromTableL.MakeGroupTip);
       SetTextTip(cbRequestFile, BoxFromTableL.RequestFile, BoxFromTableL.RequestFileTip);
       SetTextTip(cbExpose, BoxFromTableL.Expose, BoxFromTableL.ExposeTip);
+      SetTextTip(lbBlockLayer, cbBlockLayer, BoxFromTableL.BlockLayer, BoxFromTableL.BlockLayerTip);
     }
 
     public override void
@@ -135,10 +142,10 @@ namespace AVC
     }
 
     //internal static void
-    //ShowDialog()
+    //ModalDialog()
     //{
     //  using BoxFromTableStyle ab = new();
-    //  ab.ShowDialog(ab.lbTitul.Text);
+    //  ab.ModalDialog(ab.lbTitul.Text);
     //}
 
     protected void
@@ -177,6 +184,7 @@ namespace AVC
     CbMakeBlock_CheckedChanged(object sender, EventArgs e)
     {
       if (cbMakeBlock.Checked) cbMakeGroup.Checked = false;
+      pnBlockLayer.Visible = cbMakeBlock.Checked;
     }
 
     private void
@@ -192,6 +200,22 @@ namespace AVC
       cbSeparator.Items.Add(Cns.Local(BoxFromTableL.Comma));
       cbSeparator.Items.Add(Cns.Local(BoxFromTableL.Semicolon));
       cbSeparator.Items.Add("Tab");
+    }
+
+    private void 
+    CbBlockLayer_DropDown(object sender, EventArgs e)
+    {
+      try
+      {
+        if (FormEditorMode) return;
+        cbBlockLayer.Items.Clear();
+        cbBlockLayer.Items.Add("");
+        cbBlockLayer.Items.AddRange(LayerManager.GetCurDocLayerList().ToArray());
+        int index = cbBlockLayer.Items.IndexOf("0");
+        if (index >= 0) cbBlockLayer.Items.RemoveAt(index);
+      }
+      catch (System.Exception ex)
+      { Cns.Err(ex); }
     }
 
   }

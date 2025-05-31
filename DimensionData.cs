@@ -165,7 +165,9 @@ namespace AVC
       dim.SetDatabaseDefaults(db);
       dm.SetDimStyle(dim, Style); 
       if (Scale > 0.0) dim.Dimlfac /= Scale; // в стиле может быть свой масштаб
-      if (DimScale > 0.0) dim.Dimscale = DimScale;
+      if (DimScale > 0.0)
+        try { dim.Dimscale = DimScale; }
+        catch { Cns.Info(BoxFromTableL.DimScaleErr, DimScale); }
       if (!IsNullOrWhiteSpace(Text)) dim.DimensionText = Text;
       if (Height > STol.EqPoint) dim.Dimtxt = Height;
       dim.LayerId = IsNullOrWhiteSpace(Layer) ? lm.GetOrCreate(LayerEnum.Annotation) : lm.GetOrCreate(Layer, LayerEnum.Annotation);

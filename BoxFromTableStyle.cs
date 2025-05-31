@@ -64,6 +64,9 @@ namespace AVC
     private string
     _separator;
 
+    private string
+    _blockLayer;
+
     private static string
     _serverAddress = null;
 
@@ -98,6 +101,13 @@ namespace AVC
     {
       get => _separator = RegRead("Separator", ",", _separator);
       set => _separator = RegWrite("Separator", ",", value, false);  
+    }
+
+    public string
+    BlockLayer
+    {
+      get => _blockLayer = RegRead("BlockLayer", "", _blockLayer);
+      set => _blockLayer = RegWrite("BlockLayer", "", value, true);
     }
 
     public string
@@ -153,6 +163,7 @@ namespace AVC
       File = "";
       Separator = ",";
       Page = "Parts";
+      BlockLayer = "";
     }
 
 

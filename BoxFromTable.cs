@@ -60,7 +60,7 @@ namespace AVC
         Donation.AskForDonation(true);
 #endif
 #if RENT || VARS
-        DocExt.ThirdTest = db.BlockTableId; // проверка  в AssemblyStyle.NewName
+        DocExt.ThirdTest = db.BlockTableId; // проверка в AssemblyStyle.NewName и в BlockCreate.CreateNewBlock + в вызываемых командах
         if (!LicenseCheck.HasLicenseFor(DbCommand.BoxFromTableCmdName))
           throw new CancelException("");
 #endif
@@ -109,7 +109,7 @@ namespace AVC
           ed.Regen();
           ed.UpdateScreen();
           Cns.Info(BoxFromTableL.Done, count);
-          //doc.SendStringToExecute("_REGENALL ", true, false, false);
+          //_doc.SendStringToExecute("_REGENALL ", true, false, false);
         }
         else Cns.Info(BUpdateL.NoOne);
       }

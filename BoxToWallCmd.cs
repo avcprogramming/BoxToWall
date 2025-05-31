@@ -57,7 +57,7 @@ namespace AVC
         AvcManager.StartCash();
 
         // Запрос списка солидов-боксов
-        ObjectId[] objectIds = CnsAcad.Select(SolidL.SelectSolids);
+        ObjectId[] objectIds = EditorExt.Select(SolidL.SelectSolids);
         if (objectIds is null) return;
 
 #if DEMO
@@ -151,7 +151,7 @@ namespace AVC
                   }
 
                   // вставляем блок вместо всех боксов
-                  InsertBlocks(part.Objects, btrId, wall, tr);
+                  InsertBlocks(part.Objects, btrId, wall, createBoxStyle.BlockLayer, tr);
                 }
                 tr.Commit();
               }
@@ -169,7 +169,7 @@ namespace AVC
           ed.UpdateScreen();
           Utils.FlushGraphics();
           Cns.Info(BoxFromTableL.BoxToWallResult, count);
-          //doc.SendStringToExecute("_REGENALL ", true, false, false);
+          //_doc.SendStringToExecute("_REGENALL ", true, false, false);
         }
         else Cns.NothingInfo();
       }
@@ -199,13 +199,13 @@ namespace AVC
         Donation.AskForDonation(true);
 #endif
 #if RENT || VARS
-        DocExt.ThirdTest = db.BlockTableId; // проверка  в AssemblyStyle.NewName
+        DocExt.ThirdTest = db.BlockTableId; // проверка в AssemblyStyle.NewName и в BlockCreate.CreateNewBlock
         if (!LicenseCheck.HasLicenseFor(DbCommand.BoxToVectorCmdName))
           throw new CancelException("");
 #endif
 
         // Запрос списка солидов-боксов или блоков
-        ObjectId[] objectIds = CnsAcad.Select(BoxFromTableL.SelectSolidOrBlock);
+        ObjectId[] objectIds = EditorExt.Select(BoxFromTableL.SelectSolidOrBlock);
         if (objectIds is null) return;
 
         // Группируем одинаковые боксы в таблицу деталей
@@ -321,8 +321,18 @@ namespace AVC
               if (ret.IsNull) continue;
               ids.EraseAll(tr);
 
+              //// создание слоя чертежа
+              //ObjectId layerId = ObjectId.Null;
+              //if (!IsNullOrEmpty(layer))
+              //{
+              //  LayerManager lm = new(_db, _tr);
+              //  layerId = lm.GetOrCreate(layer, LayerEnum.Visible);
+              //}
+
               // вставка чертежа
-              BlockExt.Insert(ret.BtrId, spaceId, insert, scale, tr);
+              BlockReference blRef = BlockExt.Insert(ret.BtrId, spaceId, insert, scale, tr);
+              //if (blRef is not null && !layerId.IsNull)
+              //  blRef.LayerId = layerId;
               insert += step;
 
               // удаляем боксы
@@ -411,19 +421,28 @@ namespace AVC
     }
 
     private static void
-    InsertBlocks(List<AvcObj> solids, ObjectId btrId, Wall wall, Transaction tr)
+    InsertBlocks(List<AvcObj> solids, ObjectId btrId, Wall wall, string layer, Transaction tr)
     {
+      ObjectId layerId = ObjectId.Null;
+      if (!IsNullOrEmpty(layer) && solids.Count > 0)
+      {
+        LayerManager lm = new(solids[0].Id.Database, tr);
+        layerId = lm.GetOrCreate(layer, LayerEnum.Visible);
+      }
+
       foreach (AvcObj obj in solids)
       {
         LongOperationManager.TryTickOrEsc();
-        AvcSolid nextBox = obj as AvcSolid;
-        if (nextBox is null) continue;
-        Matrix3d nextTrans = nextBox.Metric.Lay.Inverse() * wall.LayDown;
-        BlockExt.Insert(btrId, nextBox.Space.Id, Point3dExt.Null, nextTrans, tr);
+        AvcSolid box = obj as AvcSolid;
+        if (box is null) continue;
+        Matrix3d standup = box.Metric.Lay.Inverse() * wall.LayDown;
+        BlockReference blRef = BlockExt.Insert(btrId, box.Space.Id, Point3dExt.Null, standup, tr);
+        if (blRef is not null && !layerId.IsNull)
+          blRef.LayerId = layerId;
         // Удаление исходного солида-стены
-        if (!nextBox.ActualLayer?.IsLocked ?? false)
+        if (!box.ActualLayer?.IsLocked ?? false && !box.Id.IsErased)
         {
-          Solid3d source = tr.GetObject(nextBox.Id, OpenMode.ForWrite, false, true) as Solid3d;
+          Solid3d source = tr.GetObject(box.Id, OpenMode.ForWrite, false, true) as Solid3d;
           source?.Erase();
         }
       }

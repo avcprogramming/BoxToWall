@@ -56,6 +56,11 @@ namespace AVC
       this.cbRequestFile = new System.Windows.Forms.CheckBox();
       this.cbExpose = new System.Windows.Forms.CheckBox();
       this.lbStyleHint = new System.Windows.Forms.Label();
+
+      this.pnBlockLayer = new System.Windows.Forms.Panel();
+      this.cbBlockLayer = new FlatComboBox();
+      this.lbBlockLayer = new System.Windows.Forms.Label();
+
       this.pnStyle.SuspendLayout();
       this.pnHeader.SuspendLayout();
       ((System.ComponentModel.ISupportInitialize)(this.errProvider)).BeginInit();
@@ -63,6 +68,7 @@ namespace AVC
       this.pnFile.SuspendLayout();
       this.pnServerAddress.SuspendLayout();
       this.pnPage.SuspendLayout();
+      this.pnBlockLayer.SuspendLayout();
       this.pnSeparator.SuspendLayout();
       this.SuspendLayout();
       // 
@@ -294,6 +300,61 @@ namespace AVC
       this.cbMakeBlock.UseVisualStyleBackColor = true;
       this.cbMakeBlock.CheckedChanged += new System.EventHandler(this.CbMakeBlock_CheckedChanged);
       this.cbMakeBlock.Validated += new System.EventHandler(this.Editor_Validated);
+
+      // 
+      // pnBlockLayer
+      // 
+      this.pnBlockLayer.Controls.Add(this.cbBlockLayer);
+      this.pnBlockLayer.Controls.Add(this.lbBlockLayer);
+      this.pnBlockLayer.Dock = System.Windows.Forms.DockStyle.Top;
+      this.pnBlockLayer.Location = new System.Drawing.Point(0, 281);
+      this.pnBlockLayer.Name = "pnBlockLayer";
+      this.pnBlockLayer.Padding = new System.Windows.Forms.Padding(10, 0, 3, 0);
+      this.pnBlockLayer.Size = new System.Drawing.Size(150, 23);
+      this.pnBlockLayer.TabIndex = 9;
+      // 
+      // cbBlockLayer
+      // 
+      this.cbBlockLayer.BackColor = System.Drawing.SystemColors.Control;
+      this.cbBlockLayer.Dock = System.Windows.Forms.DockStyle.Left;
+      this.cbBlockLayer.FlatStyle = System.Windows.Forms.FlatStyle.Popup;
+      this.cbBlockLayer.Location = new System.Drawing.Point(63, 6);
+      this.cbBlockLayer.Margin = new System.Windows.Forms.Padding(2);
+      this.cbBlockLayer.Name = "cbBlockLayer";
+      this.cbBlockLayer.Size = new System.Drawing.Size(153, 21);
+      this.cbBlockLayer.Sorted = true;
+      this.cbBlockLayer.TabIndex = 1;
+      this.cbBlockLayer.DropDown += new System.EventHandler(this.CbBlockLayer_DropDown);
+      this.cbBlockLayer.Validated += new System.EventHandler(this.Editor_Validated);
+      // 
+      // lbBlockLayer
+      // 
+      this.lbBlockLayer.AutoSize = true;
+      this.lbBlockLayer.Dock = System.Windows.Forms.DockStyle.Left;
+      this.lbBlockLayer.ImeMode = System.Windows.Forms.ImeMode.NoControl;
+      this.lbBlockLayer.Location = new System.Drawing.Point(3, 0);
+      this.lbBlockLayer.Name = "lbBlockLayer";
+      this.lbBlockLayer.Padding = new System.Windows.Forms.Padding(0, 3, 0, 0);
+      this.lbBlockLayer.Size = new System.Drawing.Size(93, 16);
+      this.lbBlockLayer.TabIndex = 0;
+      this.lbBlockLayer.Text = "Wall Block Layer";
+
+      // 
+      // cbMakeGroup
+      // 
+      this.cbMakeGroup.AutoSize = true;
+      this.cbMakeGroup.Dock = System.Windows.Forms.DockStyle.Top;
+      this.cbMakeGroup.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+      this.cbMakeGroup.ImeMode = System.Windows.Forms.ImeMode.NoControl;
+      this.cbMakeGroup.Location = new System.Drawing.Point(0, 424);
+      this.cbMakeGroup.Name = "cbMakeGroup";
+      this.cbMakeGroup.Padding = new System.Windows.Forms.Padding(3, 0, 0, 0);
+      this.cbMakeGroup.Size = new System.Drawing.Size(150, 17);
+      this.cbMakeGroup.TabIndex = 10;
+      this.cbMakeGroup.Text = "Make Group";
+      this.cbMakeGroup.UseVisualStyleBackColor = true;
+      this.cbMakeGroup.CheckedChanged += new System.EventHandler(this.CbMakeGroup_CheckedChanged);
+      this.cbMakeGroup.Validated += new System.EventHandler(this.Editor_Validated);
       // 
       // cbDrill
       // 
@@ -305,7 +366,7 @@ namespace AVC
       this.cbDrill.Name = "cbDrill";
       this.cbDrill.Padding = new System.Windows.Forms.Padding(3, 0, 0, 0);
       this.cbDrill.Size = new System.Drawing.Size(150, 17);
-      this.cbDrill.TabIndex = 10;
+      this.cbDrill.TabIndex = 11;
       this.cbDrill.Text = "Drill";
       this.cbDrill.UseVisualStyleBackColor = true;
       this.cbDrill.Validated += new System.EventHandler(this.Editor_Validated);
@@ -320,26 +381,11 @@ namespace AVC
       this.cbExpose.Name = "cbExpose";
       this.cbExpose.Padding = new System.Windows.Forms.Padding(3, 0, 0, 0);
       this.cbExpose.Size = new System.Drawing.Size(150, 17);
-      this.cbExpose.TabIndex = 11;
+      this.cbExpose.TabIndex = 12;
       this.cbExpose.Text = "Expose assemblies";
       this.cbExpose.UseVisualStyleBackColor = true;
       this.cbExpose.Validated += new System.EventHandler(this.Editor_Validated);
-      // 
-      // cbMakeGroup
-      // 
-      this.cbMakeGroup.AutoSize = true;
-      this.cbMakeGroup.Dock = System.Windows.Forms.DockStyle.Top;
-      this.cbMakeGroup.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
-      this.cbMakeGroup.ImeMode = System.Windows.Forms.ImeMode.NoControl;
-      this.cbMakeGroup.Location = new System.Drawing.Point(0, 424);
-      this.cbMakeGroup.Name = "cbMakeGroup";
-      this.cbMakeGroup.Padding = new System.Windows.Forms.Padding(3, 0, 0, 0);
-      this.cbMakeGroup.Size = new System.Drawing.Size(150, 17);
-      this.cbMakeGroup.TabIndex = 9;
-      this.cbMakeGroup.Text = "Make Group";
-      this.cbMakeGroup.UseVisualStyleBackColor = true;
-      this.cbMakeGroup.CheckedChanged += new System.EventHandler(this.CbMakeGroup_CheckedChanged);
-      this.cbMakeGroup.Validated += new System.EventHandler(this.Editor_Validated);
+
       // 
       // lbStyleHint
       // 
@@ -362,6 +408,7 @@ namespace AVC
       this.Controls.Add(this.lbStyleHint);
       this.Controls.Add(this.cbExpose);
       this.Controls.Add(this.cbDrill);
+      this.Controls.Add(this.pnBlockLayer);
       this.Controls.Add(this.cbMakeBlock);
       this.Controls.Add(this.cbMakeGroup);
       this.Controls.Add(this.pnServerAddress);
@@ -383,6 +430,7 @@ namespace AVC
       this.Controls.SetChildIndex(this.pnSeparator, 0);
       this.Controls.SetChildIndex(this.pnServerAddress, 0);
       this.Controls.SetChildIndex(this.cbMakeBlock, 0);
+      this.Controls.SetChildIndex(this.pnBlockLayer, 0);
       this.Controls.SetChildIndex(this.cbMakeGroup, 0);
       this.Controls.SetChildIndex(this.cbDrill, 0);
       this.Controls.SetChildIndex(this.cbExpose, 0);
@@ -401,6 +449,8 @@ namespace AVC
       this.pnPage.PerformLayout();
       this.pnSeparator.ResumeLayout(false);
       this.pnSeparator.PerformLayout();
+      this.pnBlockLayer.ResumeLayout(false);
+      this.pnBlockLayer.PerformLayout();
       this.ResumeLayout(false);
       this.PerformLayout();
     }
@@ -433,5 +483,9 @@ namespace AVC
     private System.Windows.Forms.CheckBox cbRequestFile;
     private System.Windows.Forms.CheckBox cbExpose;
     private System.Windows.Forms.Label lbStyleHint;
+
+    private System.Windows.Forms.Panel pnBlockLayer;
+    private FlatComboBox cbBlockLayer;
+    private System.Windows.Forms.Label lbBlockLayer;
   }
 }
